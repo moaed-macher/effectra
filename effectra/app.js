@@ -6,6 +6,8 @@
   var SL = { offen: 'Offen', arbeit: 'In Arbeit', erledigt: 'Erledigt' };
   var NEXT = { offen: 'arbeit', arbeit: 'erledigt', erledigt: 'offen' };
   var STATUS = [{ k: 'offen', l: 'Offen' }, { k: 'arbeit', l: 'In Arbeit' }, { k: 'erledigt', l: 'Erledigt' }];
+  var REPEAT = [{ k: '', l: 'Nie' }, { k: 'daily', l: 'Täglich' }, { k: 'weekdays', l: 'Werktags (Mo–Fr)' }, { k: 'weekly', l: 'Wöchentlich' }, { k: 'monthly', l: 'Monatlich' }];
+  var REPEAT_L = { daily: 'täglich', weekdays: 'werktags', weekly: 'wöchentlich', monthly: 'monatlich' };
   var PRIO = [{ k: 1, l: 'Niedrig' }, { k: 2, l: 'Normal' }, { k: 3, l: 'Hoch' }];
   var COLORS = ['blue', 'green', 'orange', 'red', 'purple', 'teal', 'pink', 'gray'];
   var COLOR_NAMES = { blue: 'Blau', green: 'Grün', orange: 'Orange', red: 'Rot', purple: 'Lila', teal: 'Türkis', pink: 'Pink', gray: 'Grau' };
@@ -28,6 +30,7 @@
     left: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg>',
     right: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 5l7 7-7 7"/></svg>',
     trendUp: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 17l6-6 4 4 6-7"/><path d="M14 8h6v6"/></svg>',
+    repeat: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17 2.5l3 3-3 3"/><path d="M4 11.5v-1a5 5 0 0 1 5-5h11M7 21.5l-3-3 3-3"/><path d="M20 12.5v1a5 5 0 0 1-5 5H4"/></svg>',
     timer: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="13.5" r="7.5"/><path d="M12 13.5V9.5M9.5 2.5h5"/></svg>',
     cloud: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 18.5a4.5 4.5 0 0 1-.6-8.96A6 6 0 0 1 18 9a4.75 4.75 0 0 1-.5 9.5z"/><path d="M12 11.5v5M9.8 14.3l2.2 2.2 2.2-2.2"/></svg>',
     trendDown: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7l6 6 4-4 6 7"/><path d="M14 16h6v-6"/></svg>'
@@ -100,11 +103,16 @@
   /* ================= Schnell-Eingabe: „Mail an Kunde morgen #Website @Max !“ ================= */
   function squash(s) { return String(s || '').toLowerCase().replace(/\s+/g, ''); }
   function parseQuick(text) {
-    var r = { title: '', due: null, priority: 2, project: null, assignee: null };
+    var r = { title: '', due: null, priority: 2, project: null, assignee: null, repeat: '' };
     var words = String(text).split(/\s+/).filter(Boolean), keep = [];
     for (var i = 0; i < words.length; i++) {
       var w = words[i], lw = w.toLowerCase().replace(/[.,]$/, ''), m;
       if (/^!+$/.test(w)) { r.priority = 3; continue; }
+      if (lw === 'täglich' || lw === 'tägl' || (lw === 'jeden' && /^tag$/i.test(words[i + 1] || ''))) { r.repeat = 'daily'; if (lw === 'jeden') i++; r.due = r.due || today(); continue; }
+      if (lw === 'werktags') { r.repeat = 'weekdays'; r.due = r.due || today(); continue; }
+      if (lw === 'wöchentlich') { r.repeat = 'weekly'; r.due = r.due || today(); continue; }
+      if (lw === 'monatlich') { r.repeat = 'monthly'; r.due = r.due || today(); continue; }
+      if (lw === 'jeden' && words[i + 1] && Object.prototype.hasOwnProperty.call(WD, words[i + 1].toLowerCase().replace(/[.,]$/, ''))) { r.repeat = 'weekly'; r.due = nextWeekday(WD[words[i + 1].toLowerCase().replace(/[.,]$/, '')]); i++; continue; }
       if (lw === 'heute') { r.due = today(); continue; }
       if (lw === 'morgen') { r.due = addDays(today(), 1); continue; }
       if (lw === 'übermorgen') { r.due = addDays(today(), 2); continue; }
@@ -263,11 +271,13 @@
   function run(q) { return Promise.resolve(q).then(function (r) { if (r && r.error) throw r.error; return r ? r.data : null; }); }
 
   /* ================= Rückmeldung ================= */
-  function toast(msg) {
+  function toast(msg, action) {
     var t = $('toast');
-    t.textContent = msg; t.hidden = false;
+    S.toastFn = action ? action.fn : null;
+    t.innerHTML = '<span>' + esc(msg) + '</span>' + (action ? '<button type="button" class="toast-btn" data-action="toast-act">' + esc(action.label) + '</button>' : '');
+    t.hidden = false; t.classList.remove('pop'); void t.offsetWidth; t.classList.add('pop');
     clearTimeout(S.toastTimer);
-    S.toastTimer = setTimeout(function () { t.hidden = true; }, 4000);
+    S.toastTimer = setTimeout(function () { t.hidden = true; S.toastFn = null; }, action ? 6000 : 4000);
   }
   function copyText(text, okMsg) {
     var done = function () { toast(okMsg); };
@@ -448,6 +458,7 @@
       if (table === 'tasks' && S.sheet && S.sheet.kind === 'task' && S.sheet.id === old.id) { closeSheet(); toast('Diese Aufgabe wurde gerade gelöscht.'); }
     } else {
       if (row.workspace_id !== S.ws) return;
+      if (pendingDel && (row.id === pendingDel.task.id || row.task_id === pendingDel.task.id)) return;
       var prevRow = byId(S[key], row.id); prevRow = prevRow ? Object.assign({}, prevRow) : null;
       upsert(key, row);
       notifyChange(table, ev, row, prevRow);
@@ -490,6 +501,7 @@
     if (subs.length) parts.push('<span class="it">' + I.list + subs.filter(function (s) { return s.done; }).length + '/' + subs.length + '</span>');
     var cc = commentsOf(t.id).length;
     if (cc) parts.push('<span class="it">' + I.chat + cc + '</span>');
+    if (t.repeat) parts.push('<span class="it" title="Wiederholt sich ' + esc(REPEAT_L[t.repeat] || '') + '">' + I.repeat + esc(REPEAT_L[t.repeat] || '') + '</span>');
     var next = NEXT[t.status] || 'offen';
     return '<div class="row task' + (done ? ' is-done' : '') + (t.priority === 3 && !done ? ' is-hot' : '') + '" data-task="' + esc(t.id) + '"' + (drag ? ' draggable="true"' : '') + '>' +
       '<button type="button" class="state" data-action="cycle" data-id="' + esc(t.id) + '" data-s="' + esc(t.status) + '" aria-label="' + esc('Status: ' + (SL[t.status] || 'Offen') + '. Wechseln zu ' + SL[next] + '.') + '"><i>' + (done ? I.check : '') + '</i></button>' +
@@ -501,26 +513,27 @@
   function group(list) { return '<div class="group">' + list.map(function (t) { return row(t); }).join('') + '</div>'; }
   function quickAdd() {
     return '<form class="quick" id="quick-form" novalidate><span class="plus" aria-hidden="true">+</span><label class="vh" for="q-title">Aufgabe schnell hinzufügen</label>' +
-      '<input id="q-title" type="text" maxlength="250" autocomplete="off" enterkeyhint="done" placeholder="Schnell hinzufügen … z. B. „Kunde anrufen morgen !“">' +
+      '<input id="q-title" type="text" maxlength="250" autocomplete="off" enterkeyhint="done" placeholder="Neue Aufgabe … z. B. „Anrufen morgen !“">' +
       '<button type="submit" class="txt-btn strong" id="q-add" disabled>Hinzufügen</button></form><div class="q-hint" id="q-hint" aria-live="polite"></div>';
   }
   function quickHint() {
     var inp = $('q-title'), h = $('q-hint'); if (!inp || !h) return;
     var v = inp.value.trim();
     $('q-add').disabled = !v;
-    if (!v) { h.innerHTML = '<span class="muted">Tipp: <b>morgen</b> · <b>fr</b> · <b>24.12.</b> · <b>#Projekt</b> · <b>@Person</b> · <b>!</b> für wichtig</span>'; return; }
+    if (!v) { h.innerHTML = '<span class="muted">Tipp: <b>morgen</b> · <b>fr</b> · <b>24.12.</b> · <b>#Projekt</b> · <b>@Person</b> · <b>!</b> für wichtig · <b>jeden mo</b></span>'; return; }
     var q = parseQuick(v), c = [];
     if (q.due) c.push('<span class="chip">Fällig: ' + esc(dueLabel(q.due)) + '</span>');
     if (q.project) { var p = byId(S.projects, q.project); if (p) c.push('<span class="chip"><i class="dot" style="--c:var(--c-' + colorOf(p.color) + ')"></i>' + esc(p.name) + '</span>'); }
     if (q.assignee) c.push('<span class="chip">' + avatar(q.assignee, 'xs') + esc(who(q.assignee).first) + '</span>');
     if (q.priority === 3) c.push('<span class="chip hot">Wichtig</span>');
+    if (q.repeat) c.push('<span class="chip">' + I.repeat + esc(REPEAT_L[q.repeat]) + '</span>');
     h.innerHTML = c.join('');
   }
   function quickSubmit() {
     var inp = $('q-title'), q = parseQuick(inp.value);
     if (!q.title) { toast('Bitte einen Titel eingeben.'); return; }
     var data = { workspace_id: S.ws, title: q.title.slice(0, 200), notes: '', project_id: q.project || (S.tab === 'board' && S.filterProject) || null,
-      assignee: q.assignee || S.uid, status: S.tab === 'board' ? S.boardStatus : 'offen', priority: q.priority, due: q.due };
+      assignee: q.assignee || S.uid, status: S.tab === 'board' ? S.boardStatus : 'offen', priority: q.priority, due: q.due, repeat: q.repeat };
     $('q-add').disabled = true;
     run(S.sb.from('tasks').insert(data).select().single()).then(function (r) {
       upsert('tasks', r); inp.value = ''; quickHint(); toast('Aufgabe angelegt'); queue();
@@ -531,7 +544,7 @@
     if (!t || t.status === next || S.busy[id]) return;
     var prev = t.status;
     t.status = next; S.busy[id] = true;
-    if (next === 'erledigt') celebrateAt(el);
+    if (next === 'erledigt') { celebrateAt(el); rewardDone(t, el); }
     queue();
     run(S.sb.from('tasks').update({ status: next }).eq('id', id).select().single())
       .then(function (r) { if (r) upsert('tasks', r); queue(); })
@@ -643,7 +656,7 @@
         }).join('') + '</div>' : '<p class="empty-col">Keine offenen Deadlines</p>') + '</section>';
     }
 
-    return head + quickAdd() + '<div class="scope">' + segc({ list: [{ k: 'me', l: 'Ich' }, { k: 'team', l: 'Team' }], sel: S.scope, action: 'scope', label: 'Ansicht' }) + '</div>' + kpis +
+    return head + heroCard() + quickAdd() + '<div class="scope">' + segc({ list: [{ k: 'me', l: 'Ich' }, { k: 'team', l: 'Team' }], sel: S.scope, action: 'scope', label: 'Ansicht' }) + '</div>' + kpis +
       '<div class="widgets"><section class="widget"><div class="w-head"><span class="w-title">' + (mine ? 'Deine Aufgaben' : 'Team gesamt') + '</span><span class="w-sub">' + st.done + ' von ' + st.total + '</span></div>' +
       '<div class="ring-line">' + ring(st.pct) + '<div class="legend">' +
       '<div class="lg"><i class="dot" style="--c:var(--accent)"></i><span>Erledigt</span><b>' + st.done + '</b></div>' +
@@ -887,7 +900,7 @@
   function notifyChange(table, ev, row, prev) {
     if (table === 'tasks' && row.assignee === S.uid && row.workspace_id === S.ws) {
       var recent = S.mine[row.id] && Date.now() - S.mine[row.id] < 8000;
-      if (!recent && ((ev === 'INSERT' && row.created_by !== S.uid) || (ev === 'UPDATE' && prev && prev.assignee !== S.uid))) {
+      if (!recent && ((ev === 'INSERT' && row.created_by !== S.uid && !row.repeat) || (ev === 'UPDATE' && prev && prev.assignee !== S.uid))) {
         toastIfOpen('Dir wurde „' + row.title + '“ zugewiesen');
         notify('Neue Aufgabe für dich', row.title, row.id);
       }
@@ -958,6 +971,199 @@
     var nb = $('notify-state'); if (nb) nb.textContent = notifyOn() ? 'An' : 'Aus';
   }
 
+  /* ================= Belohnung: Punkte, Level, Tagesziel, Erfolge ================= */
+  var LS_GOAL = 'effectra.goal', LS_SOUND = 'effectra.sound', LS_BADGES = 'effectra.badges', LS_LEVEL = 'effectra.level', LS_GOALDAY = 'effectra.goalday';
+  var LEVELS = ['Neuling', 'Starter', 'Macher', 'Antreiber', 'Profi', 'Experte', 'Meister', 'Champion', 'Legende'];
+  var QUOTES = [
+    'Kleine Schritte, jeden Tag – das summiert sich.',
+    'Fang mit der Aufgabe an, die du am liebsten aufschiebst.',
+    'Fertig ist besser als perfekt.',
+    'Eine Sache nach der anderen. Du schaffst das.',
+    'Heute ist ein guter Tag, um etwas abzuhaken.',
+    'Fokus schlägt Fleiß: 25 Minuten, dann Pause.',
+    'Was du heute erledigst, musst du morgen nicht mehr tragen.',
+    'Gemeinsam geht’s leichter – schau mal, woran das Team arbeitet.',
+    'Erst das Wichtige, dann das Dringende.',
+    'Jeder Haken zählt. Wirklich jeder.',
+    'Plane den Tag, sonst plant er dich.',
+    'Pausen sind auch Arbeit – fürs Gehirn.'
+  ];
+  function goal() { var g = Number(ls(LS_GOAL)); return g >= 1 && g <= 20 ? g : 3; }
+  function soundOn() { return ls(LS_SOUND) !== '0'; }
+  function myDone() { return S.tasks.filter(function (t) { return t.assignee === S.uid && t.status === 'erledigt' && t.done_at; }); }
+  function xpOf(t) {
+    var x = 10 + (t.priority === 3 ? 10 : t.priority === 1 ? -4 : 0);
+    if (t.due && t.done_at && ymd(new Date(t.done_at)) <= t.due) x += 5;
+    return x;
+  }
+  function levelInfo() {
+    var xp = myDone().reduce(function (s, t) { return s + xpOf(t); }, 0), lv = 1;
+    while (xp >= 25 * lv * (lv + 1)) lv++;
+    var from = 25 * (lv - 1) * lv, to = 25 * lv * (lv + 1);
+    return { xp: xp, lv: lv, title: LEVELS[Math.min(lv - 1, LEVELS.length - 1)], into: xp - from, need: to - from, pct: Math.round((xp - from) / (to - from) * 100) };
+  }
+  function doneToday() { var t0 = today(); return myDone().filter(function (t) { return ymd(new Date(t.done_at)) === t0; }).length; }
+  function quote() { var d = new Date(), n = Math.floor((d - new Date(d.getFullYear(), 0, 0)) / 86400000); return QUOTES[n % QUOTES.length]; }
+
+  function badgeList() {
+    var mine = myDone(), n = mine.length, sk = streak(S.tasks.filter(function (t) { return t.assignee === S.uid; }));
+    var days = doneDays(mine), best = 0, g = goal(), goalDays = 0;
+    Object.keys(days).forEach(function (d) { best = Math.max(best, days[d]); if (days[d] >= g) goalDays++; });
+    var hours = mine.map(function (t) { return new Date(t.done_at).getHours(); });
+    var onTime = mine.filter(function (t) { return t.due && ymd(new Date(t.done_at)) <= t.due; }).length;
+    var overdue = S.tasks.filter(function (t) { return t.assignee === S.uid && t.status !== 'erledigt' && t.due && t.due < today(); }).length;
+    var comments = S.comments.filter(function (c) { return c.author === S.uid; }).length;
+    var projDone = S.projects.filter(function (p) { var l = S.tasks.filter(function (t) { return t.project_id === p.id; }); return l.length >= 3 && stats(l).pct === 100; }).length;
+    var lv = levelInfo().lv;
+    function b(id, icon, name, text, cur, max) { return { id: id, icon: icon, name: name, text: text, cur: Math.min(cur, max), max: max, ok: cur >= max }; }
+    return [
+      b('first', '✅', 'Erster Haken', 'Deine erste Aufgabe erledigt', n, 1),
+      b('ten', '🔟', 'Zehner', '10 Aufgaben erledigt', n, 10),
+      b('fifty', '🚀', 'Durchstarter', '50 Aufgaben erledigt', n, 50),
+      b('hundred', '💯', 'Hundert!', '100 Aufgaben erledigt', n, 100),
+      b('s3', '🔥', 'Am Ball', '3 Tage in Folge etwas erledigt', sk, 3),
+      b('s7', '⚡', 'Eine Woche Feuer', '7 Tage in Folge etwas erledigt', sk, 7),
+      b('s30', '🏆', 'Unaufhaltsam', '30 Tage in Folge etwas erledigt', sk, 30),
+      b('goal', '🎯', 'Volltreffer', 'Dein Tagesziel erreicht', goalDays, 1),
+      b('goal10', '🎖️', 'Zielsicher', 'An 10 Tagen das Tagesziel erreicht', goalDays, 10),
+      b('bigday', '🌋', 'Großer Tag', '10 Aufgaben an einem Tag', best, 10),
+      b('ontime', '⏱️', 'Pünktlich', '10 Aufgaben vor der Frist erledigt', onTime, 10),
+      b('early', '🌅', 'Früher Vogel', 'Vor 8 Uhr etwas erledigt', hours.some(function (h) { return h < 8; }) ? 1 : 0, 1),
+      b('night', '🦉', 'Nachteule', 'Nach 22 Uhr etwas erledigt', hours.some(function (h) { return h >= 22; }) ? 1 : 0, 1),
+      b('clean', '🧘', 'Alles im Griff', 'Nichts überfällig und mind. 5 erledigt', overdue === 0 && n >= 5 ? 1 : 0, 1),
+      b('talk', '💬', 'Teamplayer', '10 Kommentare geschrieben', comments, 10),
+      b('proj', '📦', 'Projekt fertig', 'Ein Projekt mit mind. 3 Aufgaben abgeschlossen', projDone, 1),
+      b('lv5', '👑', 'Profi', 'Level 5 erreicht', lv, 5)
+    ];
+  }
+  function badgeSheet() {
+    var L = badgeList(), got = L.filter(function (x) { return x.ok; }).length, li = levelInfo();
+    return wrapForm('badge-form', '', head('Erfolge', '', 'Fertig') +
+      '<div class="lv-card">' + avatar(S.uid, 'l') + '<div class="txt"><b>Level ' + li.lv + ' · ' + esc(li.title) + '</b><span class="sub">' + li.xp + ' Punkte · noch ' + (li.need - li.into) + ' bis Level ' + (li.lv + 1) + '</span>' +
+      '<div class="xpbar"><i style="--p:' + li.pct + '%"></i></div></div></div>' +
+      '<div class="sec-h"><span>Abzeichen</span><span>' + got + ' von ' + L.length + '</span></div><div class="badges">' +
+      L.map(function (x) {
+        return '<div class="badge-c' + (x.ok ? ' ok' : '') + '"><span class="b-ic" aria-hidden="true">' + x.icon + '</span><b>' + esc(x.name) + '</b><span>' + esc(x.text) + '</span>' +
+          (x.ok ? '<span class="b-ok">Freigeschaltet</span>' : '<div class="pbar" style="--p:' + Math.round(x.cur / x.max * 100) + '%"><i></i></div><span class="b-prog">' + x.cur + ' / ' + x.max + '</span>') + '</div>';
+      }).join('') + '</div>' +
+      '<p class="meta-line">Punkte gibt es für jede erledigte Aufgabe, die dir zugewiesen ist: wichtige Aufgaben und pünktlich erledigte zählen mehr.</p>');
+  }
+
+  // Ton beim Abhaken (kurz, leise, abschaltbar)
+  var audio = null;
+  function tone(seq) {
+    if (!soundOn()) return;
+    try {
+      audio = audio || new (window.AudioContext || window.webkitAudioContext)();
+      var t = audio.currentTime;
+      seq.forEach(function (f, i) {
+        var o = audio.createOscillator(), g = audio.createGain();
+        o.type = 'sine'; o.frequency.value = f;
+        g.gain.setValueAtTime(0.0001, t + i * 0.09);
+        g.gain.exponentialRampToValueAtTime(0.12, t + i * 0.09 + 0.015);
+        g.gain.exponentialRampToValueAtTime(0.0001, t + i * 0.09 + 0.35);
+        o.connect(g); g.connect(audio.destination);
+        o.start(t + i * 0.09); o.stop(t + i * 0.09 + 0.4);
+      });
+    } catch (e) {}
+  }
+  function buzz(ms) { try { if (navigator.vibrate) navigator.vibrate(ms); } catch (e) {} }
+  function bigCelebrate() {
+    var w = window.innerWidth, h = window.innerHeight;
+    [[0.25, 0.35], [0.5, 0.25], [0.75, 0.35], [0.4, 0.5], [0.6, 0.5]].forEach(function (p, i) { setTimeout(function () { celebrate(w * p[0], h * p[1]); }, i * 140); });
+  }
+  // Nach dem Abhaken: Punkte zeigen, Ton, Tagesziel und neue Erfolge prüfen
+  function rewardDone(t, el) {
+    if (t.assignee === S.uid) floatXp(el, xpOf(Object.assign({}, t, { done_at: new Date().toISOString() })));
+    tone([784, 1175]); buzz(12);
+    setTimeout(checkProgress, 300);
+  }
+  function floatXp(el, n) {
+    if (!el) return;
+    try { if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return; } catch (e) {}
+    var r = el.getBoundingClientRect(), f = document.createElement('span');
+    f.className = 'xp-float'; f.textContent = '+' + n;
+    f.style.left = (r.left + r.width / 2) + 'px'; f.style.top = (r.top - 4) + 'px';
+    document.body.appendChild(f);
+    setTimeout(function () { f.remove(); }, 1100);
+  }
+  function checkProgress() {
+    if (S.screen !== 'app' || !S.uid) return;
+    var t0 = today(), msgs = [];
+    if (doneToday() >= goal() && ls(LS_GOALDAY) !== t0) {
+      ls(LS_GOALDAY, t0);
+      msgs.push('🎯 Tagesziel geschafft! ' + goal() + ' von ' + goal() + ' erledigt.');
+    }
+    var li = levelInfo(), lastLv = Number(ls(LS_LEVEL)) || 0;
+    if (!lastLv) ls(LS_LEVEL, String(li.lv));
+    else if (li.lv > lastLv) { ls(LS_LEVEL, String(li.lv)); msgs.push('⭐ Level ' + li.lv + ' erreicht: ' + li.title + '!'); }
+    var got = badgeList().filter(function (x) { return x.ok; }), seenRaw = ls(LS_BADGES), seen = [];
+    try { seen = JSON.parse(seenRaw || '[]'); } catch (e) {}
+    if (seenRaw === null) ls(LS_BADGES, JSON.stringify(got.map(function (x) { return x.id; })));
+    else {
+      var fresh = got.filter(function (x) { return seen.indexOf(x.id) < 0; });
+      if (fresh.length) {
+        ls(LS_BADGES, JSON.stringify(seen.concat(fresh.map(function (x) { return x.id; }))));
+        msgs.push(fresh[0].icon + ' Neuer Erfolg: ' + fresh[0].name + (fresh.length > 1 ? ' (+' + (fresh.length - 1) + ')' : ''));
+      }
+    }
+    if (msgs.length) {
+      bigCelebrate(); tone([523, 659, 784, 1047]); buzz([20, 40, 20]);
+      toast(msgs.join('  ·  '), { label: 'Ansehen', fn: function () { openSheet('badges'); } });
+    }
+  }
+  function heroCard() {
+    var li = levelInfo(), dt = doneToday(), g = goal(), pct = Math.min(100, Math.round(dt / g * 100));
+    var C = 2 * Math.PI * 30, d = (pct / 100 * C).toFixed(1);
+    return '<section class="hero">' +
+      '<div class="goal-ring' + (dt >= g ? ' full' : '') + '"><svg viewBox="0 0 72 72" role="img" aria-label="Tagesziel: ' + dt + ' von ' + g + '"><circle cx="36" cy="36" r="30" fill="none" stroke-width="8" class="ring-bg"/>' +
+      (pct ? '<circle cx="36" cy="36" r="30" fill="none" stroke-width="8" stroke-linecap="round" class="ring-fg" stroke-dasharray="' + d + ' 189" transform="rotate(-90 36 36)"/>' : '') +
+      '</svg><span>' + (dt >= g ? '🎯' : dt + '/' + g) + '</span></div>' +
+      '<div class="hero-txt"><span class="h-k">Tagesziel</span><b>' + (dt >= g ? 'Geschafft – stark!' : dt === 0 ? g + ' Aufgaben heute' : 'Noch ' + (g - dt) + ' bis zum Ziel') + '</b><span class="h-q">' + esc(quote()) + '</span></div>' +
+      '<button type="button" class="hero-lv" data-action="badges" aria-label="Level und Erfolge ansehen"><span class="lv-badge">' + li.lv + '</span><span class="lv-txt"><b>' + esc(li.title) + '</b><span>' + li.into + ' / ' + li.need + ' Punkte</span></span>' +
+      '<span class="xpbar"><i style="--p:' + li.pct + '%"></i></span></button></section>';
+  }
+
+  /* ================= Rückgängig ================= */
+  var pendingDel = null;
+  function flushDelete() {
+    if (!pendingDel) return;
+    var p = pendingDel; pendingDel = null; clearTimeout(p.timer);
+    run(S.sb.from('tasks').delete().eq('id', p.task.id)).catch(function (e) {
+      S.tasks.push(p.task); S.subtasks = S.subtasks.concat(p.subs); S.comments = S.comments.concat(p.comments); toast(errText(e)); queue();
+    });
+  }
+  function deleteTask(id) {
+    flushDelete();
+    var t = byId(S.tasks, id); if (!t) return;
+    pendingDel = { task: t, subs: subsOf(id), comments: commentsOf(id) };
+    S.tasks = S.tasks.filter(function (x) { return x.id !== id; });
+    S.subtasks = S.subtasks.filter(function (x) { return x.task_id !== id; });
+    S.comments = S.comments.filter(function (x) { return x.task_id !== id; });
+    pendingDel.timer = setTimeout(flushDelete, 6000);
+    closeSheet(); queue();
+    toast('Aufgabe gelöscht', { label: 'Rückgängig', fn: function () {
+      if (!pendingDel || pendingDel.task.id !== id) return;
+      var p = pendingDel; pendingDel = null; clearTimeout(p.timer);
+      S.tasks.push(p.task); S.subtasks = S.subtasks.concat(p.subs); S.comments = S.comments.concat(p.comments);
+      toast('Wiederhergestellt'); queue();
+    } });
+  }
+  window.addEventListener('pagehide', flushDelete);
+  document.addEventListener('visibilitychange', function () { if (document.visibilityState === 'hidden') flushDelete(); });
+
+  function duplicateTask(id) {
+    var t = byId(S.tasks, id); if (!t) return;
+    var data = { workspace_id: S.ws, title: (t.title + ' (Kopie)').slice(0, 200), notes: t.notes || '', project_id: t.project_id, assignee: t.assignee, status: 'offen', priority: t.priority, due: t.due, repeat: t.repeat || '' };
+    var subs = subsOf(id);
+    run(S.sb.from('tasks').insert(data).select().single()).then(function (row) {
+      upsert('tasks', row);
+      if (!subs.length) return row;
+      return run(S.sb.from('subtasks').insert(subs.map(function (s, i) { return { task_id: row.id, workspace_id: S.ws, title: s.title, position: i }; })).select())
+        .then(function (rows) { (rows || []).forEach(function (r) { upsert('subtasks', r); }); return row; });
+    }).then(function (row) { toast('Kopie angelegt'); queue(); if (row) openSheet('task', row.id); }, function (e) { toast(errText(e)); });
+  }
+
   /* ================= Zeichnen ================= */
   function render() {
     if (S.screen !== 'app') return;
@@ -979,6 +1185,7 @@
     if ($('q-title')) { $('q-title').value = qv; quickHint(); }
     if (keepId) { var f = $(keepId); if (f) { f.focus(); try { f.setSelectionRange(caret, caret); } catch (e) {} } }
     focusTick();
+    if (!S.checked) { S.checked = true; setTimeout(checkProgress, 800); }
     if (!S.reminded) { S.reminded = true; setTimeout(dailyReminder, 1500); }
   }
   function queue() {
@@ -1013,13 +1220,15 @@
       '<div class="group" style="margin-top:18px">' +
       '<label class="f row" for="t-project"><span class="lbl">Projekt</span><span class="val"><select id="t-project">' + opts(projects, v.project_id || '') + '</select><i class="chev"></i></span></label>' +
       '<label class="f row" for="t-assignee"><span class="lbl">Zuständig</span><span class="val"><select id="t-assignee">' + opts(people, v.assignee || '') + '</select><i class="chev"></i></span></label>' +
-      '<label class="f row" for="t-due"><span class="lbl">Fällig am</span><span class="val"><button type="button" class="txt-btn" id="clear-due" data-action="clear-due"' + (v.due ? '' : ' hidden') + '>Entfernen</button><input id="t-due" type="date" value="' + esc(v.due || '') + '"></span></label></div>' +
+      '<label class="f row" for="t-due"><span class="lbl">Fällig am</span><span class="val"><button type="button" class="txt-btn" id="clear-due" data-action="clear-due"' + (v.due ? '' : ' hidden') + '>Entfernen</button><input id="t-due" type="date" value="' + esc(v.due || '') + '"></span></label>' +
+      '<label class="f row" for="t-repeat"><span class="lbl">Wiederholen</span><span class="val"><select id="t-repeat">' + opts(REPEAT, v.repeat || '') + '</select><i class="chev"></i></span></label></div>' +
       '<div class="sec-h"><span>Status</span></div>' + segc({ id: 't-status', list: STATUS, sel: v.status, label: 'Status' }) +
       '<div class="sec-h"><span>Priorität</span></div>' + segc({ id: 't-priority', list: PRIO, sel: v.priority, label: 'Priorität' }) +
       '<div class="sec-h"><span>Unteraufgaben</span><span id="sub-count"></span></div><div class="group" id="subs"></div>' +
       (t ? '<div class="sec-h"><span>Kommentare</span></div><div class="group" id="comments"></div>' : '') +
       '<div class="form-error" id="form-error" role="alert"></div>' + meta +
-      (t ? '<div class="group" style="margin-top:18px"><button type="button" class="row-btn destructive" data-action="delete-task">Aufgabe löschen</button></div>' : ''));
+      (t ? '<div class="group" style="margin-top:18px"><button type="button" class="row-btn accent" data-action="dup-task" data-id="' + esc(t.id) + '"><span class="grow">Aufgabe duplizieren</span></button></div>' +
+        '<div class="group" style="margin-top:12px"><button type="button" class="row-btn destructive" data-action="delete-task">Aufgabe löschen</button></div>' : ''));
   }
   function renderSubs() {
     var box = $('subs'); if (!box || !S.sheet) return;
@@ -1081,6 +1290,9 @@
     return wrapForm('settings-form', '', head('Einstellungen', '', 'Fertig') +
       '<div class="sec-h"><span>Profil</span></div><div class="group"><div class="f row"><label class="vh" for="s-name">Dein Name</label><input id="s-name" type="text" maxlength="60" placeholder="Dein Name" value="' + esc(me.display_name || '') + '"><button type="button" class="txt-btn strong" data-action="save-name">Sichern</button></div>' +
       (S.email ? '<div class="row-btn static"><span class="grow muted">' + esc(S.email) + '</span></div>' : '') + '</div>' +
+      '<div class="sec-h"><span>Tagesziel</span><span>Aufgaben pro Tag</span></div>' + segc({ list: [{ k: 1, l: '1' }, { k: 3, l: '3' }, { k: 5, l: '5' }, { k: 8, l: '8' }, { k: 12, l: '12' }], sel: goal(), action: 'goal', label: 'Tagesziel' }) +
+      '<div class="group" style="margin-top:12px"><button type="button" class="row-btn" data-action="badges"><span class="grow">🏅 Level & Erfolge</span><i class="chev"></i></button>' +
+      '<button type="button" class="row-btn" data-action="toggle-sound"><span class="grow">Ton beim Abhaken</span><span class="muted" id="sound-state">' + (soundOn() ? 'An' : 'Aus') + '</span></button></div>' +
       '<div class="sec-h"><span>Darstellung</span></div>' + segc({ list: THEMES, sel: theme(), action: 'theme', label: 'Design' }) +
       '<div class="group" style="margin-top:12px"><button type="button" class="row-btn" data-action="toggle-notify"><span class="grow">Benachrichtigungen</span><span class="muted" id="notify-state">' + (notifyOn() ? 'An' : 'Aus') + '</span></button></div>' +
       '<div class="sec-h"><span>Sicherung</span></div><div class="group">' +
@@ -1099,7 +1311,7 @@
   }
 
   function openSheet(kind, id) {
-    var html = kind === 'task' ? taskSheet(id) : kind === 'project' ? projectSheet(id) : settingsSheet();
+    var html = kind === 'task' ? taskSheet(id) : kind === 'project' ? projectSheet(id) : kind === 'badges' ? badgeSheet() : settingsSheet();
     if (!html) return;
     clearTimeout(S.closeTimer);
     S.armed = null; S.sheet = { kind: kind, id: id || '' }; S.last = document.activeElement; S.draftSubs = [];
@@ -1135,7 +1347,8 @@
     var title = g('t-title').trim();
     if (!title) { formError('Bitte einen Titel eingeben.'); form.querySelector('#t-title').focus(); return; }
     var data = { title: title, notes: g('t-notes').trim(), project_id: g('t-project') || null, assignee: g('t-assignee') || null,
-      status: g('t-status'), priority: Number(g('t-priority')), due: g('t-due') || null };
+      status: g('t-status'), priority: Number(g('t-priority')), due: g('t-due') || null, repeat: g('t-repeat') || '' };
+    if (data.repeat && !data.due) data.due = today();
     var id = form.dataset.id;
     if (id) S.mine[id] = Date.now();
     lockSave(true);
@@ -1172,6 +1385,11 @@
     btn.dataset.s = next;
     btn.querySelector('i').innerHTML = next === 'erledigt' ? I.check : '';
     var r = btn.closest('.row'); if (r) r.classList.toggle('is-done', next === 'erledigt');
+    if (next === 'erledigt') {
+      celebrateAt(btn); rewardDone(t, btn);
+      if (!t.repeat) toast('Erledigt: ' + t.title, { label: 'Rückgängig', fn: function undo() { if (S.busy[id]) { setTimeout(undo, 200); return; } setStatus(id, prev); } });
+      else toast('Erledigt – die nächste Wiederholung ist angelegt');
+    }
     S.hold = Date.now() + 450;
     S.busy[id] = true;
     run(S.sb.from('tasks').update({ status: next }).eq('id', id).select().single())
@@ -1251,10 +1469,13 @@
         break;
       case 'delete-task':
         if (!arm(el, 'del-task', 'Wirklich löschen?')) break;
-        el.disabled = true;
-        var tid = S.sheet.id;
-        run(S.sb.from('tasks').delete().eq('id', tid)).then(function () { S.tasks = S.tasks.filter(function (t) { return t.id !== tid; }); closeSheet(); toast('Aufgabe gelöscht'); queue(); }, function (er) { el.disabled = false; formError(errText(er)); });
+        deleteTask(S.sheet.id);
         break;
+      case 'dup-task': closeSheet(); duplicateTask(id); break;
+      case 'toast-act': var fn = S.toastFn; S.toastFn = null; $('toast').hidden = true; if (fn) fn(); break;
+      case 'badges': openSheet('badges'); break;
+      case 'goal': ls(LS_GOAL, el.dataset.seg); ls(LS_GOALDAY, null); queue(); break;
+      case 'toggle-sound': ls(LS_SOUND, soundOn() ? '0' : null); var ss = $('sound-state'); if (ss) ss.textContent = soundOn() ? 'An' : 'Aus'; if (soundOn()) tone([784, 1175]); break;
       case 'delete-project':
         if (!arm(el, 'del-project', 'Wirklich löschen?')) break;
         el.disabled = true;
