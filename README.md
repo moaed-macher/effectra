@@ -17,7 +17,7 @@ Die neueste Version gibt es unter **[Releases](../../releases/latest)**:
 - Schnell-Eingabe: „Kunde anrufen morgen #Projekt @Person !“
 - Schnellsuche mit Strg+K und Tastenkürzel
 - Fokus-Timer, Benachrichtigungen, hell/dunkel
-- Anmeldung per E-Mail oder SMS-Code
+- Anmeldung per E-Mail und Passwort
 - Tägliche Cloud-Sicherung in Supabase, Export als JSON und CSV
 
 ## Aufbau

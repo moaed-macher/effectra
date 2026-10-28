@@ -543,10 +543,6 @@ kbd { font: 600 11px/1 var(--mono); padding: 3px 6px; border-radius: 5px; backgr
 .pal-it.done .grow { text-decoration: line-through; opacity: 0.7; }
 .pal-k { flex: none; font-size: 12px; color: var(--label2); }
 
-/* Anmeldung */
-.or { display: flex; align-items: center; gap: 10px; width: 100%; margin: 10px 0 4px; color: var(--label3); font-size: 13px; }
-.or::before, .or::after { content: ""; flex: 1; height: 1px; background: var(--sep); }
-.switch-line .btn-t { gap: 8px; }
 
 /* Einstellungen */
 .keys kbd { flex: none; }

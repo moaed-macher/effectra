@@ -28,7 +28,6 @@
     left: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg>',
     right: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 5l7 7-7 7"/></svg>',
     trendUp: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 17l6-6 4 4 6-7"/><path d="M14 8h6v6"/></svg>',
-    phone: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="6.5" y="2.5" width="11" height="19" rx="2.5"/><path d="M10.5 18.5h3"/></svg>',
     timer: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="13.5" r="7.5"/><path d="M12 13.5V9.5M9.5 2.5h5"/></svg>',
     cloud: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 18.5a4.5 4.5 0 0 1-.6-8.96A6 6 0 0 1 18 9a4.75 4.75 0 0 1-.5 9.5z"/><path d="M12 11.5v5M9.8 14.3l2.2 2.2 2.2-2.2"/></svg>',
     trendDown: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7l6 6 4-4 6 7"/><path d="M14 16h6v-6"/></svg>'
@@ -42,7 +41,7 @@
     sheet: null, armed: null, draftSubs: [], channel: null, live: true, lastLoad: 0, loadSeq: 0,
     hold: 0, pending: false, animNext: true, toastTimer: 0, closeTimer: 0, busy: {}, onbBack: false,
     calMonth: '', calDay: '', calMine: false, preset: null, dragId: null, focusEnd: 0,
-    phone: '', smsPhone: '', smsName: '', phoneStep: '', backups: null, backupErr: '', mine: {}, pal: null
+    backups: null, backupErr: '', mine: {}, pal: null
   };
   var LS_NOTIFY = 'effectra.notify';
   var LS_REMIND = 'effectra.remind';
@@ -221,7 +220,7 @@
   function who(id) {
     var p = S.profiles[id];
     var isMe = !!id && id === S.uid;
-    var nm = (p && p.display_name) || (isMe ? (S.email.split('@')[0] || (S.smsName || '')) : '');
+    var nm = (p && p.display_name) || (isMe ? S.email.split('@')[0] : '');
     var name = nm || 'Teammitglied';
     return { id: id, name: name, label: isMe ? name + ' (du)' : name, first: name.split(' ')[0], isMe: isMe };
   }
@@ -257,16 +256,8 @@
     if (/already registered|user_already_exists/i.test(m + c)) return 'Für diese E-Mail gibt es schon ein Konto. Melde dich an.';
     if (/rate limit|too many|over_email_send_rate_limit/i.test(m + c) || e.status === 429) return 'Zu viele Versuche. Warte ein paar Minuten.';
     if (/password/i.test(m) && /(short|least|weak)/i.test(m)) return 'Das Passwort ist zu schwach. Nimm mindestens 8 Zeichen.';
-    if (/phone.*(provider|disabled|unsupported|not enabled)|sms_send_failed|phone_provider_disabled/i.test(m + c)) return 'Die SMS-Anmeldung ist noch nicht eingerichtet. Melde dich mit E-Mail an.';
-    if (/otp_expired|expired|invalid.*(otp|token)|token.*invalid/i.test(m + c)) return 'Der Code ist falsch oder abgelaufen.';
     if (/Failed to fetch|NetworkError/i.test(m)) return 'Keine Verbindung. Prüfe dein Internet.';
     return 'Das hat nicht geklappt. Versuche es erneut.';
-  }
-  function normPhone(s) {
-    var p = String(s || '').replace(/[\s\-\/()]/g, '');
-    if (/^00/.test(p)) p = '+' + p.slice(2);
-    else if (/^0/.test(p)) p = '+49' + p.slice(1);
-    return /^\+[1-9]\d{6,14}$/.test(p) ? p : '';
   }
   function missingTable(e) { var m = (e && e.message) || ''; return (e && (e.code === 'PGRST205' || e.code === '42P01' || e.code === 'PGRST202' || e.code === '42883')) || /schema cache|does not exist/i.test(m); }
   function run(q) { return Promise.resolve(q).then(function (r) { if (r && r.error) throw r.error; return r ? r.data : null; }); }
@@ -300,30 +291,11 @@
 
   function authScreen(msg, kind) {
     var m = S.authMode;
-    var title = { login: 'Anmelden', signup: 'Konto erstellen', forgot: 'Passwort vergessen', reset: 'Neues Passwort', sms: 'Mit SMS anmelden' }[m];
+    var title = { login: 'Anmelden', signup: 'Konto erstellen', forgot: 'Passwort vergessen', reset: 'Neues Passwort'}[m];
     var fields = '';
-    if (m === 'sms') {
-      var codeStep = !!S.smsPhone;
-      fields = codeStep
-        ? '<p class="msg">Wir haben einen Code an <b>' + esc(S.smsPhone) + '</b> geschickt.</p><label class="vh" for="a-otp">SMS-Code</label><input class="field code-in" id="a-otp" type="text" inputmode="numeric" autocomplete="one-time-code" maxlength="8" placeholder="Code aus der SMS" required>'
-        : '<label class="vh" for="a-phone">Handynummer</label><input class="field" id="a-phone" type="tel" autocomplete="tel" inputmode="tel" maxlength="20" placeholder="Handynummer, z. B. 0171 1234567" required>' +
-          '<label class="vh" for="a-name">Name</label><input class="field" id="a-name" type="text" autocomplete="name" maxlength="60" placeholder="Dein Name (nur beim ersten Mal)">';
-      showScreen('<div class="auth"><img class="logo" src="icons/icon-192.png" alt="" width="72" height="72"><h1>Effectra</h1><p class="tag">Anmelden mit Code per SMS</p>' +
-        '<form id="auth-form" novalidate><h2 class="vh">' + title + '</h2>' + fields +
-        (msg ? '<div class="msg ' + (kind || 'err') + '" role="alert">' + esc(msg) + '</div>' : '') +
-        '<button class="btn-p block" id="auth-btn" type="submit">' + (codeStep ? 'Bestätigen' : 'Code senden') + '</button></form><div class="switch-line">' +
-        (codeStep ? '<button type="button" class="txt-btn small" data-action="sms-reset">Andere Nummer</button>' : '') +
-        '<button type="button" class="txt-btn small" data-auth="login">Mit E-Mail anmelden</button></div></div>');
-      var sf = $('screen').querySelector('input'); if (sf) sf.focus();
-      return;
-    }
-    if (m === 'signup') fields += '<label class="vh" for="a-name">Name</label><input class="field" id="a-name" type="text" autocomplete="name" maxlength="60" placeholder="Dein Name" required>';
-    if (m !== 'reset') fields += '<label class="vh" for="a-email">E-Mail</label><input class="field" id="a-email" type="email" autocomplete="email" inputmode="email" maxlength="200" placeholder="E-Mail" required>';
-    if (m !== 'forgot') fields += '<label class="vh" for="a-pass">Passwort</label><input class="field" id="a-pass" type="password" minlength="8" maxlength="72" autocomplete="' + (m === 'login' ? 'current-password' : 'new-password') + '" placeholder="' + (m === 'login' ? 'Passwort' : 'Passwort (mind. 8 Zeichen)') + '" required>';
     var btn = { login: 'Anmelden', signup: 'Konto erstellen', forgot: 'Link senden', reset: 'Passwort speichern' }[m];
     var links = '';
-    if (m === 'login') links = '<button type="button" class="txt-btn small" data-auth="signup">Konto erstellen</button><button type="button" class="txt-btn small" data-auth="forgot">Passwort vergessen?</button>' +
-      '<div class="or"><span>oder</span></div><button type="button" class="btn-t block" data-auth="sms">' + I.phone + ' Mit SMS-Code anmelden</button>';
+    if (m === 'login') links = '<button type="button" class="txt-btn small" data-auth="signup">Konto erstellen</button><button type="button" class="txt-btn small" data-auth="forgot">Passwort vergessen?</button>';
     else if (m !== 'reset') links = '<button type="button" class="txt-btn small" data-auth="login">Zurück zur Anmeldung</button>';
     showScreen('<div class="auth"><img class="logo" src="icons/icon-192.png" alt="" width="72" height="72"><h1>Effectra</h1><p class="tag">Gemeinsam fokussiert arbeiten.</p>' +
       '<form id="auth-form" novalidate><h2 class="vh">' + title + '</h2>' + fields +
@@ -348,7 +320,6 @@
   function authSubmit(form) {
     var g = function (id) { var el = form.querySelector('#' + id); return el ? el.value.trim() : ''; };
     var m = S.authMode, email = g('a-email'), pass = form.querySelector('#a-pass') ? form.querySelector('#a-pass').value : '', name = g('a-name');
-    if (m === 'sms') return smsSubmit(form);
     if (m !== 'reset' && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return authScreenKeep('Bitte gib eine gültige E-Mail ein.');
     if ((m === 'signup' || m === 'reset') && pass.length < 8) return authScreenKeep('Das Passwort braucht mindestens 8 Zeichen.');
     if (m === 'signup' && !name) return authScreenKeep('Bitte gib deinen Namen ein.');
@@ -366,28 +337,6 @@
       else if (m === 'forgot') { S.authMode = 'login'; authScreen('Wenn es ein Konto mit dieser E-Mail gibt, ist ein Link zum Zurücksetzen unterwegs.', 'ok'); }
       else if (m === 'reset') { S.recovery = false; toast('Passwort geändert'); start(); }
     }).catch(function (e) { authScreenKeep(authErr(e)); });
-  }
-  function smsSubmit(form) {
-    var btn = $('auth-btn');
-    if (!S.smsPhone) {
-      var phone = normPhone(form.querySelector('#a-phone').value);
-      if (!phone) return authScreen('Bitte gib eine gültige Handynummer ein, z. B. 0171 1234567.');
-      S.smsName = form.querySelector('#a-name').value.trim().slice(0, 60);
-      btn.disabled = true;
-      var opt = S.smsName ? { data: { display_name: S.smsName } } : {};
-      S.sb.auth.signInWithOtp({ phone: phone, options: opt }).then(function (r) {
-        if (r.error) throw r.error;
-        S.smsPhone = phone; authScreen();
-      }).catch(function (e) { authScreen(authErr(e)); });
-      return;
-    }
-    var code = form.querySelector('#a-otp').value.replace(/\D/g, '');
-    if (code.length < 4) return authScreen('Bitte gib den Code aus der SMS ein.');
-    btn.disabled = true;
-    S.sb.auth.verifyOtp({ phone: S.smsPhone, token: code, type: 'sms' }).then(function (r) {
-      if (r.error) throw r.error;
-      S.smsPhone = '';
-    }).catch(function (e) { authScreen(authErr(e)); });
   }
   function authScreenKeep(msg) {
     var vals = {};
@@ -999,26 +948,6 @@
     var nb = $('notify-state'); if (nb) nb.textContent = notifyOn() ? 'An' : 'Aus';
   }
 
-  /* ================= Handynummer im Konto ================= */
-  function phoneSave() {
-    var inp = $('s-phone'), err = function (m) { formError(m); };
-    if (S.phoneStep === 'code') {
-      var code = $('s-otp').value.replace(/\D/g, '');
-      if (code.length < 4) return err('Bitte gib den Code aus der SMS ein.');
-      S.sb.auth.verifyOtp({ phone: S.pendingPhone, token: code, type: 'phone_change' }).then(function (r) {
-        if (r.error) throw r.error;
-        S.phone = S.pendingPhone; S.phoneStep = ''; toast('Handynummer gespeichert'); openSheet('settings');
-      }).catch(function (e) { err(authErr(e)); });
-      return;
-    }
-    var phone = normPhone(inp.value);
-    if (!phone) return err('Bitte gib eine gültige Handynummer ein.');
-    S.sb.auth.updateUser({ phone: phone }).then(function (r) {
-      if (r.error) throw r.error;
-      S.pendingPhone = phone; S.phoneStep = 'code'; openSheet('settings');
-    }).catch(function (e) { err(authErr(e)); });
-  }
-
   /* ================= Zeichnen ================= */
   function render() {
     if (S.screen !== 'app') return;
@@ -1142,10 +1071,6 @@
     return wrapForm('settings-form', '', head('Einstellungen', '', 'Fertig') +
       '<div class="sec-h"><span>Profil</span></div><div class="group"><div class="f row"><label class="vh" for="s-name">Dein Name</label><input id="s-name" type="text" maxlength="60" placeholder="Dein Name" value="' + esc(me.display_name || '') + '"><button type="button" class="txt-btn strong" data-action="save-name">Sichern</button></div>' +
       (S.email ? '<div class="row-btn static"><span class="grow muted">' + esc(S.email) + '</span></div>' : '') + '</div>' +
-      '<div class="sec-h"><span>SMS-Anmeldung</span><span>' + (S.phone ? esc(S.phone) : 'keine Nummer') + '</span></div><div class="group">' +
-      (S.phoneStep === 'code'
-        ? '<div class="f row"><label class="vh" for="s-otp">SMS-Code</label><input id="s-otp" type="text" inputmode="numeric" autocomplete="one-time-code" maxlength="8" placeholder="Code aus der SMS an ' + esc(S.pendingPhone) + '"><button type="button" class="txt-btn strong" data-action="save-phone">Bestätigen</button></div>'
-        : '<div class="f row"><label class="vh" for="s-phone">Handynummer</label><input id="s-phone" type="tel" inputmode="tel" maxlength="20" placeholder="' + (S.phone ? 'Neue Handynummer' : 'Handynummer hinzufügen') + '"><button type="button" class="txt-btn strong" data-action="save-phone">Code senden</button></div>') + '</div>' +
       '<div class="sec-h"><span>Darstellung</span></div>' + segc({ list: THEMES, sel: theme(), action: 'theme', label: 'Design' }) +
       '<div class="group" style="margin-top:12px"><button type="button" class="row-btn" data-action="toggle-notify"><span class="grow">Benachrichtigungen</span><span class="muted" id="notify-state">' + (notifyOn() ? 'An' : 'Aus') + '</span></button></div>' +
       '<div class="sec-h"><span>Sicherung</span></div><div class="group">' +
@@ -1373,8 +1298,6 @@
         break;
       case 'logout': closeSheet(); unsubscribe(); S.sb.auth.signOut(); break;
       case 'retry': start(); break;
-      case 'sms-reset': S.smsPhone = ''; authScreen(); break;
-      case 'save-phone': phoneSave(); break;
       case 'theme': ls(LS_THEME, el.dataset.seg === 'auto' ? null : el.dataset.seg); applyTheme(); break;
       case 'toggle-notify': toggleNotify(); break;
       case 'backup-now': backupNow(el); break;
@@ -1491,7 +1414,6 @@
         authScreen(); return;
       }
       S.email = session.user.email || '';
-      S.phone = session.user.phone ? '+' + String(session.user.phone).replace(/^\+/, '') : '';
       if (uid !== S.uid) { S.uid = uid; setTimeout(start, 0); }
     });
   }
