@@ -1,7 +1,7 @@
 {
   "name": "effectra-desktop",
   "productName": "Effectra",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Effectra – Projekte, Aufgaben und Fortschritt fürs Team.",
   "main": "main.js",
   "author": "Effectra",
@@ -18,11 +18,32 @@
   "build": {
     "appId": "app.effectra.desktop",
     "productName": "Effectra",
-    "files": ["main.js", "web/**/*"],
-    "directories": { "output": "dist" },
-    "win": { "target": "nsis", "icon": "web/icons/icon-512.png" },
-    "nsis": { "oneClick": true, "artifactName": "Effectra-Setup-${version}.exe" },
-    "mac": { "target": [{ "target": "dmg", "arch": ["universal"] }], "icon": "web/icons/icon-512.png", "category": "public.app-category.productivity" },
-    "dmg": { "artifactName": "Effectra-${version}.dmg" }
+    "files": [
+      "main.js",
+      "web/**/*"
+    ],
+    "directories": {
+      "output": "dist"
+    },
+    "win": {
+      "target": "nsis",
+      "icon": "web/icons/icon-512.png"
+    },
+    "nsis": {
+      "oneClick": true,
+      "artifactName": "Effectra-Setup-${version}.exe",
+      "createDesktopShortcut": true,
+      "shortcutName": "Effectra"
+    },
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "moaed-macher",
+        "repo": "effectra"
+      }
+    ]
+  },
+  "dependencies": {
+    "electron-updater": "6.6.2"
   }
 }

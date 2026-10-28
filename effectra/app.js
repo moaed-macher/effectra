@@ -10,6 +10,11 @@
   var COLORS = ['blue', 'green', 'orange', 'red', 'purple', 'teal', 'pink', 'gray'];
   var COLOR_NAMES = { blue: 'Blau', green: 'Grün', orange: 'Orange', red: 'Rot', purple: 'Lila', teal: 'Türkis', pink: 'Pink', gray: 'Grau' };
   var LS_WS = 'effectra.ws';
+  var LS_THEME = 'effectra.theme';
+  var LS_FOCUS = 'effectra.focus';
+  var TABS = ['heute', 'board', 'kalender', 'projekte', 'team'];
+  var THEMES = [{ k: 'auto', l: 'Automatisch' }, { k: 'light', l: 'Hell' }, { k: 'dark', l: 'Dunkel' }];
+  var WD = { mo: 1, montag: 1, di: 2, dienstag: 2, mi: 3, mittwoch: 3, do: 4, donnerstag: 4, fr: 5, freitag: 5, sa: 6, samstag: 6, sonntag: 0 };
 
   var I = {
     check: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>',
@@ -18,7 +23,15 @@
     chat: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 5.5h16v10H9l-5 4z"/></svg>',
     search: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.5"/><path d="M20 20l-4.6-4.6"/></svg>',
     up: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 19V5M6 11l6-6 6 6"/></svg>',
-    calm: '<svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9.5"/><path d="M7.5 12.5l3 3 6-6.5"/></svg>'
+    calm: '<svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9.5"/><path d="M7.5 12.5l3 3 6-6.5"/></svg>',
+    flame: '<svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 2.5c.6 3-1 4.8-2.6 6.6C7.8 10.9 6 12.8 6 15.6 6 19 8.7 21.5 12 21.5s6-2.5 6-5.9c0-2.4-1.2-4.2-2.6-5.6-.2 1.6-.9 2.7-2 3.2.5-3.6-.3-7.2-1.4-10.7z"/></svg>',
+    left: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg>',
+    right: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 5l7 7-7 7"/></svg>',
+    trendUp: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 17l6-6 4 4 6-7"/><path d="M14 8h6v6"/></svg>',
+    phone: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="6.5" y="2.5" width="11" height="19" rx="2.5"/><path d="M10.5 18.5h3"/></svg>',
+    timer: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="13.5" r="7.5"/><path d="M12 13.5V9.5M9.5 2.5h5"/></svg>',
+    cloud: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 18.5a4.5 4.5 0 0 1-.6-8.96A6 6 0 0 1 18 9a4.75 4.75 0 0 1-.5 9.5z"/><path d="M12 11.5v5M9.8 14.3l2.2 2.2 2.2-2.2"/></svg>',
+    trendDown: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7l6 6 4-4 6 7"/><path d="M14 16h6v-6"/></svg>'
   };
 
   /* ================= Zustand ================= */
@@ -27,8 +40,12 @@
     workspaces: [], ws: null, members: [], profiles: {}, projects: [], tasks: [], subtasks: [], comments: [], activity: [],
     tab: 'heute', scope: 'me', boardStatus: 'offen', filterMine: false, filterProject: '', search: '', showAllDone: false,
     sheet: null, armed: null, draftSubs: [], channel: null, live: true, lastLoad: 0, loadSeq: 0,
-    hold: 0, pending: false, animNext: true, toastTimer: 0, closeTimer: 0, busy: {}, onbBack: false
+    hold: 0, pending: false, animNext: true, toastTimer: 0, closeTimer: 0, busy: {}, onbBack: false,
+    calMonth: '', calDay: '', calMine: false, preset: null, dragId: null, focusEnd: 0,
+    phone: '', smsPhone: '', smsName: '', phoneStep: '', backups: null, backupErr: '', mine: {}, pal: null
   };
+  var LS_NOTIFY = 'effectra.notify';
+  var LS_REMIND = 'effectra.remind';
   function $(id) { return document.getElementById(id); }
 
   /* ================= Hilfen ================= */
@@ -70,13 +87,141 @@
     try { if (v === undefined) return localStorage.getItem(k); if (v === null) localStorage.removeItem(k); else localStorage.setItem(k, v); } catch (e) {}
     return null;
   }
+  function monthStart(s) { return s.slice(0, 8) + '01'; }
+  function nextWeekday(n) { var d = new Date(), diff = (n - d.getDay() + 7) % 7 || 7; d.setDate(d.getDate() + diff); return ymd(d); }
+
+  /* ================= Design (hell/dunkel) ================= */
+  function theme() { var t = ls(LS_THEME); return t === 'light' || t === 'dark' ? t : 'auto'; }
+  function applyTheme() {
+    var t = theme(), root = document.documentElement;
+    if (t === 'auto') root.removeAttribute('data-theme'); else root.setAttribute('data-theme', t);
+  }
+  applyTheme();
+
+  /* ================= Schnell-Eingabe: „Mail an Kunde morgen #Website @Max !“ ================= */
+  function squash(s) { return String(s || '').toLowerCase().replace(/\s+/g, ''); }
+  function parseQuick(text) {
+    var r = { title: '', due: null, priority: 2, project: null, assignee: null };
+    var words = String(text).split(/\s+/).filter(Boolean), keep = [];
+    for (var i = 0; i < words.length; i++) {
+      var w = words[i], lw = w.toLowerCase().replace(/[.,]$/, ''), m;
+      if (/^!+$/.test(w)) { r.priority = 3; continue; }
+      if (lw === 'heute') { r.due = today(); continue; }
+      if (lw === 'morgen') { r.due = addDays(today(), 1); continue; }
+      if (lw === 'übermorgen') { r.due = addDays(today(), 2); continue; }
+      if (lw === 'nächste' && words[i + 1] && /^woche/i.test(words[i + 1])) { r.due = nextWeekday(1); i++; continue; }
+      if (Object.prototype.hasOwnProperty.call(WD, lw)) { r.due = nextWeekday(WD[lw]); continue; }
+      if ((m = w.match(/^(\d{1,2})\.(\d{1,2})\.(\d{2,4})?$/))) {
+        var y = m[3] ? Number(m[3].length === 2 ? '20' + m[3] : m[3]) : new Date().getFullYear();
+        var d = new Date(y, Number(m[2]) - 1, Number(m[1]));
+        if (d.getMonth() === Number(m[2]) - 1) {
+          if (!m[3] && ymd(d) < today()) d.setFullYear(y + 1);
+          r.due = ymd(d); continue;
+        }
+      }
+      if (w.charAt(0) === '#' && w.length > 1) {
+        var pq = squash(w.slice(1)), proj = null;
+        S.projects.forEach(function (p) { if (!proj && squash(p.name).indexOf(pq) === 0) proj = p; });
+        if (proj) { r.project = proj.id; continue; }
+      }
+      if (w.charAt(0) === '@' && w.length > 1) {
+        var mq = squash(w.slice(1)), mem = null;
+        if (mq === 'ich' || mq === 'mich') mem = S.uid;
+        S.members.forEach(function (x) { if (!mem && squash(who(x.user_id).name).indexOf(mq) === 0) mem = x.user_id; });
+        if (mem) { r.assignee = mem; continue; }
+      }
+      keep.push(w);
+    }
+    r.title = keep.join(' ');
+    return r;
+  }
+
+  /* ================= Kleine Freuden ================= */
+  function celebrate(x, y) {
+    try { if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return; } catch (e) {}
+    var box = document.createElement('div'), cols = ['blue', 'green', 'orange', 'red', 'purple', 'teal', 'pink'];
+    box.className = 'confetti'; box.style.left = x + 'px'; box.style.top = y + 'px';
+    for (var i = 0; i < 18; i++) {
+      var p = document.createElement('i'), a = Math.random() * Math.PI * 2, dist = 40 + Math.random() * 70;
+      p.style.setProperty('--dx', Math.round(Math.cos(a) * dist) + 'px');
+      p.style.setProperty('--dy', Math.round(Math.sin(a) * dist - 30) + 'px');
+      p.style.setProperty('--r', Math.round(Math.random() * 540 - 270) + 'deg');
+      p.style.setProperty('--k', 'var(--c-' + cols[i % cols.length] + ')');
+      box.appendChild(p);
+    }
+    document.body.appendChild(box);
+    setTimeout(function () { box.remove(); }, 1000);
+  }
+  function celebrateAt(el) { if (!el) return; var r = el.getBoundingClientRect(); celebrate(r.left + r.width / 2, r.top + r.height / 2); }
+
+  /* ================= Statistik ================= */
+  function doneDays(list) {
+    var days = {};
+    list.forEach(function (t) { if (t.status === 'erledigt' && t.done_at) { var d = ymd(new Date(t.done_at)); days[d] = (days[d] || 0) + 1; } });
+    return days;
+  }
+  function streak(list) {
+    var days = doneDays(list), d = today(), n = 0;
+    if (!days[d]) d = addDays(d, -1);
+    while (days[d]) { n++; d = addDays(d, -1); }
+    return n;
+  }
+  function doneBetween(list, from, to) {
+    var days = doneDays(list), n = 0;
+    Object.keys(days).forEach(function (d) { if (d >= from && d <= to) n += days[d]; });
+    return n;
+  }
+
+  /* ================= Fokus-Timer ================= */
+  S.focusEnd = Number(ls(LS_FOCUS)) || 0;
+  if (S.focusEnd && S.focusEnd < Date.now()) { S.focusEnd = 0; ls(LS_FOCUS, null); }
+  function focusLeft() { return Math.max(0, S.focusEnd - Date.now()); }
+  function mmss(ms) { var s = Math.ceil(ms / 1000); return pad(Math.floor(s / 60)) + ':' + pad(s % 60); }
+  function focusTick() {
+    var pill = $('focus-pill');
+    if (!S.focusEnd) { if (pill) pill.hidden = true; return; }
+    var left = focusLeft(), txt = mmss(left);
+    if (pill) { pill.hidden = false; pill.textContent = 'Fokus ' + txt; }
+    var els = document.querySelectorAll('[data-focus-time]');
+    for (var i = 0; i < els.length; i++) els[i].textContent = txt;
+    if (!left) {
+      S.focusEnd = 0; ls(LS_FOCUS, null);
+      if (pill) pill.hidden = true;
+      toast('Fokuszeit vorbei – gönn dir eine kurze Pause!');
+      celebrate(window.innerWidth / 2, window.innerHeight / 3);
+      queue();
+    }
+  }
+  setInterval(focusTick, 1000);
+
+  /* ================= Export ================= */
+  function csvCell(v) {
+    var s = String(v == null ? '' : v);
+    if (/^[=+\-@\t\r]/.test(s)) s = "'" + s; // verhindert Formeln in Excel
+    return '"' + s.replace(/"/g, '""') + '"';
+  }
+  function exportCsv() {
+    var rows = [['Titel', 'Status', 'Priorität', 'Fällig', 'Projekt', 'Zuständig', 'Unteraufgaben', 'Notizen', 'Angelegt', 'Erledigt']];
+    S.tasks.slice().sort(sortActive).forEach(function (t) {
+      var p = t.project_id ? byId(S.projects, t.project_id) : null, subs = subsOf(t.id);
+      rows.push([t.title, SL[t.status] || t.status, (PRIO[(t.priority || 2) - 1] || PRIO[1]).l, t.due || '', p ? p.name : '', t.assignee ? who(t.assignee).name : '',
+        subs.length ? subs.filter(function (s) { return s.done; }).length + '/' + subs.length : '', t.notes || '', t.created_at ? ymd(new Date(t.created_at)) : '', t.done_at ? ymd(new Date(t.done_at)) : '']);
+    });
+    var csv = '﻿' + rows.map(function (r) { return r.map(csvCell).join(';'); }).join('\r\n');
+    var url = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }));
+    var a = document.createElement('a');
+    a.href = url; a.download = 'effectra-aufgaben-' + today() + '.csv';
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(function () { URL.revokeObjectURL(url); }, 5000);
+    toast(pl(S.tasks.length, 'Aufgabe', 'Aufgaben') + ' exportiert');
+  }
 
   /* ================= Personen ================= */
   function hash(s) { var h = 0; s = String(s || ''); for (var i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) | 0; return Math.abs(h); }
   function who(id) {
     var p = S.profiles[id];
     var isMe = !!id && id === S.uid;
-    var nm = (p && p.display_name) || (isMe ? S.email.split('@')[0] : '');
+    var nm = (p && p.display_name) || (isMe ? (S.email.split('@')[0] || (S.smsName || '')) : '');
     var name = nm || 'Teammitglied';
     return { id: id, name: name, label: isMe ? name + ' (du)' : name, first: name.split(' ')[0], isMe: isMe };
   }
@@ -112,9 +257,18 @@
     if (/already registered|user_already_exists/i.test(m + c)) return 'Für diese E-Mail gibt es schon ein Konto. Melde dich an.';
     if (/rate limit|too many|over_email_send_rate_limit/i.test(m + c) || e.status === 429) return 'Zu viele Versuche. Warte ein paar Minuten.';
     if (/password/i.test(m) && /(short|least|weak)/i.test(m)) return 'Das Passwort ist zu schwach. Nimm mindestens 8 Zeichen.';
+    if (/phone.*(provider|disabled|unsupported|not enabled)|sms_send_failed|phone_provider_disabled/i.test(m + c)) return 'Die SMS-Anmeldung ist noch nicht eingerichtet. Melde dich mit E-Mail an.';
+    if (/otp_expired|expired|invalid.*(otp|token)|token.*invalid/i.test(m + c)) return 'Der Code ist falsch oder abgelaufen.';
     if (/Failed to fetch|NetworkError/i.test(m)) return 'Keine Verbindung. Prüfe dein Internet.';
     return 'Das hat nicht geklappt. Versuche es erneut.';
   }
+  function normPhone(s) {
+    var p = String(s || '').replace(/[\s\-\/()]/g, '');
+    if (/^00/.test(p)) p = '+' + p.slice(2);
+    else if (/^0/.test(p)) p = '+49' + p.slice(1);
+    return /^\+[1-9]\d{6,14}$/.test(p) ? p : '';
+  }
+  function missingTable(e) { var m = (e && e.message) || ''; return (e && (e.code === 'PGRST205' || e.code === '42P01' || e.code === 'PGRST202' || e.code === '42883')) || /schema cache|does not exist/i.test(m); }
   function run(q) { return Promise.resolve(q).then(function (r) { if (r && r.error) throw r.error; return r ? r.data : null; }); }
 
   /* ================= Rückmeldung ================= */
@@ -146,14 +300,30 @@
 
   function authScreen(msg, kind) {
     var m = S.authMode;
-    var title = { login: 'Anmelden', signup: 'Konto erstellen', forgot: 'Passwort vergessen', reset: 'Neues Passwort' }[m];
+    var title = { login: 'Anmelden', signup: 'Konto erstellen', forgot: 'Passwort vergessen', reset: 'Neues Passwort', sms: 'Mit SMS anmelden' }[m];
     var fields = '';
+    if (m === 'sms') {
+      var codeStep = !!S.smsPhone;
+      fields = codeStep
+        ? '<p class="msg">Wir haben einen Code an <b>' + esc(S.smsPhone) + '</b> geschickt.</p><label class="vh" for="a-otp">SMS-Code</label><input class="field code-in" id="a-otp" type="text" inputmode="numeric" autocomplete="one-time-code" maxlength="8" placeholder="Code aus der SMS" required>'
+        : '<label class="vh" for="a-phone">Handynummer</label><input class="field" id="a-phone" type="tel" autocomplete="tel" inputmode="tel" maxlength="20" placeholder="Handynummer, z. B. 0171 1234567" required>' +
+          '<label class="vh" for="a-name">Name</label><input class="field" id="a-name" type="text" autocomplete="name" maxlength="60" placeholder="Dein Name (nur beim ersten Mal)">';
+      showScreen('<div class="auth"><img class="logo" src="icons/icon-192.png" alt="" width="72" height="72"><h1>Effectra</h1><p class="tag">Anmelden mit Code per SMS</p>' +
+        '<form id="auth-form" novalidate><h2 class="vh">' + title + '</h2>' + fields +
+        (msg ? '<div class="msg ' + (kind || 'err') + '" role="alert">' + esc(msg) + '</div>' : '') +
+        '<button class="btn-p block" id="auth-btn" type="submit">' + (codeStep ? 'Bestätigen' : 'Code senden') + '</button></form><div class="switch-line">' +
+        (codeStep ? '<button type="button" class="txt-btn small" data-action="sms-reset">Andere Nummer</button>' : '') +
+        '<button type="button" class="txt-btn small" data-auth="login">Mit E-Mail anmelden</button></div></div>');
+      var sf = $('screen').querySelector('input'); if (sf) sf.focus();
+      return;
+    }
     if (m === 'signup') fields += '<label class="vh" for="a-name">Name</label><input class="field" id="a-name" type="text" autocomplete="name" maxlength="60" placeholder="Dein Name" required>';
     if (m !== 'reset') fields += '<label class="vh" for="a-email">E-Mail</label><input class="field" id="a-email" type="email" autocomplete="email" inputmode="email" maxlength="200" placeholder="E-Mail" required>';
     if (m !== 'forgot') fields += '<label class="vh" for="a-pass">Passwort</label><input class="field" id="a-pass" type="password" minlength="8" maxlength="72" autocomplete="' + (m === 'login' ? 'current-password' : 'new-password') + '" placeholder="' + (m === 'login' ? 'Passwort' : 'Passwort (mind. 8 Zeichen)') + '" required>';
     var btn = { login: 'Anmelden', signup: 'Konto erstellen', forgot: 'Link senden', reset: 'Passwort speichern' }[m];
     var links = '';
-    if (m === 'login') links = '<button type="button" class="txt-btn small" data-auth="signup">Konto erstellen</button><button type="button" class="txt-btn small" data-auth="forgot">Passwort vergessen?</button>';
+    if (m === 'login') links = '<button type="button" class="txt-btn small" data-auth="signup">Konto erstellen</button><button type="button" class="txt-btn small" data-auth="forgot">Passwort vergessen?</button>' +
+      '<div class="or"><span>oder</span></div><button type="button" class="btn-t block" data-auth="sms">' + I.phone + ' Mit SMS-Code anmelden</button>';
     else if (m !== 'reset') links = '<button type="button" class="txt-btn small" data-auth="login">Zurück zur Anmeldung</button>';
     showScreen('<div class="auth"><img class="logo" src="icons/icon-192.png" alt="" width="72" height="72"><h1>Effectra</h1><p class="tag">Gemeinsam fokussiert arbeiten.</p>' +
       '<form id="auth-form" novalidate><h2 class="vh">' + title + '</h2>' + fields +
@@ -178,6 +348,7 @@
   function authSubmit(form) {
     var g = function (id) { var el = form.querySelector('#' + id); return el ? el.value.trim() : ''; };
     var m = S.authMode, email = g('a-email'), pass = form.querySelector('#a-pass') ? form.querySelector('#a-pass').value : '', name = g('a-name');
+    if (m === 'sms') return smsSubmit(form);
     if (m !== 'reset' && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return authScreenKeep('Bitte gib eine gültige E-Mail ein.');
     if ((m === 'signup' || m === 'reset') && pass.length < 8) return authScreenKeep('Das Passwort braucht mindestens 8 Zeichen.');
     if (m === 'signup' && !name) return authScreenKeep('Bitte gib deinen Namen ein.');
@@ -195,6 +366,28 @@
       else if (m === 'forgot') { S.authMode = 'login'; authScreen('Wenn es ein Konto mit dieser E-Mail gibt, ist ein Link zum Zurücksetzen unterwegs.', 'ok'); }
       else if (m === 'reset') { S.recovery = false; toast('Passwort geändert'); start(); }
     }).catch(function (e) { authScreenKeep(authErr(e)); });
+  }
+  function smsSubmit(form) {
+    var btn = $('auth-btn');
+    if (!S.smsPhone) {
+      var phone = normPhone(form.querySelector('#a-phone').value);
+      if (!phone) return authScreen('Bitte gib eine gültige Handynummer ein, z. B. 0171 1234567.');
+      S.smsName = form.querySelector('#a-name').value.trim().slice(0, 60);
+      btn.disabled = true;
+      var opt = S.smsName ? { data: { display_name: S.smsName } } : {};
+      S.sb.auth.signInWithOtp({ phone: phone, options: opt }).then(function (r) {
+        if (r.error) throw r.error;
+        S.smsPhone = phone; authScreen();
+      }).catch(function (e) { authScreen(authErr(e)); });
+      return;
+    }
+    var code = form.querySelector('#a-otp').value.replace(/\D/g, '');
+    if (code.length < 4) return authScreen('Bitte gib den Code aus der SMS ein.');
+    btn.disabled = true;
+    S.sb.auth.verifyOtp({ phone: S.smsPhone, token: code, type: 'sms' }).then(function (r) {
+      if (r.error) throw r.error;
+      S.smsPhone = '';
+    }).catch(function (e) { authScreen(authErr(e)); });
   }
   function authScreenKeep(msg) {
     var vals = {};
@@ -306,7 +499,9 @@
       if (table === 'tasks' && S.sheet && S.sheet.kind === 'task' && S.sheet.id === old.id) { closeSheet(); toast('Diese Aufgabe wurde gerade gelöscht.'); }
     } else {
       if (row.workspace_id !== S.ws) return;
+      var prevRow = byId(S[key], row.id); prevRow = prevRow ? Object.assign({}, prevRow) : null;
       upsert(key, row);
+      notifyChange(table, ev, row, prevRow);
       if (table === 'activity') { S.activity.sort(function (a, b) { return b.id - a.id; }); S.activity = S.activity.slice(0, 60); }
     }
     queue();
@@ -335,7 +530,7 @@
     return S.comments.filter(function (c) { return c.task_id === taskId; }).sort(function (a, b) { return a.created_at < b.created_at ? -1 : 1; });
   }
 
-  function row(t) {
+  function row(t, drag) {
     var done = t.status === 'erledigt';
     var overdue = !done && t.due && t.due < today();
     var p = t.project_id ? byId(S.projects, t.project_id) : null;
@@ -347,14 +542,53 @@
     var cc = commentsOf(t.id).length;
     if (cc) parts.push('<span class="it">' + I.chat + cc + '</span>');
     var next = NEXT[t.status] || 'offen';
-    return '<div class="row task' + (done ? ' is-done' : '') + '">' +
+    return '<div class="row task' + (done ? ' is-done' : '') + (t.priority === 3 && !done ? ' is-hot' : '') + '" data-task="' + esc(t.id) + '"' + (drag ? ' draggable="true"' : '') + '>' +
       '<button type="button" class="state" data-action="cycle" data-id="' + esc(t.id) + '" data-s="' + esc(t.status) + '" aria-label="' + esc('Status: ' + (SL[t.status] || 'Offen') + '. Wechseln zu ' + SL[next] + '.') + '"><i>' + (done ? I.check : '') + '</i></button>' +
       '<button type="button" class="main" data-action="open-task" data-id="' + esc(t.id) + '"><span class="txt"><span class="ttl">' +
       (t.priority === 3 ? '<span class="prio" title="Hohe Priorität">! </span>' : '') + esc(t.title) + '</span>' +
       (parts.length ? '<span class="sub">' + parts.join('') + '</span>' : '') + '</span>' +
       (t.assignee ? avatar(t.assignee, 's') : '') + '</button></div>';
   }
-  function group(list) { return '<div class="group">' + list.map(row).join('') + '</div>'; }
+  function group(list) { return '<div class="group">' + list.map(function (t) { return row(t); }).join('') + '</div>'; }
+  function quickAdd() {
+    return '<form class="quick" id="quick-form" novalidate><span class="plus" aria-hidden="true">+</span><label class="vh" for="q-title">Aufgabe schnell hinzufügen</label>' +
+      '<input id="q-title" type="text" maxlength="250" autocomplete="off" enterkeyhint="done" placeholder="Schnell hinzufügen … z. B. „Kunde anrufen morgen !“">' +
+      '<button type="submit" class="txt-btn strong" id="q-add" disabled>Hinzufügen</button></form><div class="q-hint" id="q-hint" aria-live="polite"></div>';
+  }
+  function quickHint() {
+    var inp = $('q-title'), h = $('q-hint'); if (!inp || !h) return;
+    var v = inp.value.trim();
+    $('q-add').disabled = !v;
+    if (!v) { h.innerHTML = '<span class="muted">Tipp: <b>morgen</b> · <b>fr</b> · <b>24.12.</b> · <b>#Projekt</b> · <b>@Person</b> · <b>!</b> für wichtig</span>'; return; }
+    var q = parseQuick(v), c = [];
+    if (q.due) c.push('<span class="chip">Fällig: ' + esc(dueLabel(q.due)) + '</span>');
+    if (q.project) { var p = byId(S.projects, q.project); if (p) c.push('<span class="chip"><i class="dot" style="--c:var(--c-' + colorOf(p.color) + ')"></i>' + esc(p.name) + '</span>'); }
+    if (q.assignee) c.push('<span class="chip">' + avatar(q.assignee, 'xs') + esc(who(q.assignee).first) + '</span>');
+    if (q.priority === 3) c.push('<span class="chip hot">Wichtig</span>');
+    h.innerHTML = c.join('');
+  }
+  function quickSubmit() {
+    var inp = $('q-title'), q = parseQuick(inp.value);
+    if (!q.title) { toast('Bitte einen Titel eingeben.'); return; }
+    var data = { workspace_id: S.ws, title: q.title.slice(0, 200), notes: '', project_id: q.project || (S.tab === 'board' && S.filterProject) || null,
+      assignee: q.assignee || S.uid, status: S.tab === 'board' ? S.boardStatus : 'offen', priority: q.priority, due: q.due };
+    $('q-add').disabled = true;
+    run(S.sb.from('tasks').insert(data).select().single()).then(function (r) {
+      upsert('tasks', r); inp.value = ''; quickHint(); toast('Aufgabe angelegt'); queue();
+    }, function (e) { $('q-add').disabled = false; toast(errText(e)); });
+  }
+  function setStatus(id, next, el) {
+    var t = byId(S.tasks, id);
+    if (!t || t.status === next || S.busy[id]) return;
+    var prev = t.status;
+    t.status = next; S.busy[id] = true;
+    if (next === 'erledigt') celebrateAt(el);
+    queue();
+    run(S.sb.from('tasks').update({ status: next }).eq('id', id).select().single())
+      .then(function (r) { if (r) upsert('tasks', r); queue(); })
+      .catch(function (e) { t.status = prev; toast(errText(e)); queue(); })
+      .then(function () { delete S.busy[id]; });
+  }
   function sortActive(a, b) {
     if ((b.priority || 2) !== (a.priority || 2)) return (b.priority || 2) - (a.priority || 2);
     if (a.due && b.due && a.due !== b.due) return a.due < b.due ? -1 : 1;
@@ -408,7 +642,7 @@
     var me = who(S.uid), h = new Date().getHours();
     var greet = h < 11 ? 'Guten Morgen' : h < 18 ? 'Hallo' : 'Guten Abend';
     var head = '<h1 class="large">' + greet + ', ' + esc(me.first) + '</h1><p class="subtitle">' + esc(fmtLong.format(new Date())) + '</p>';
-    if (!S.tasks.length) return head + emptyState('Los geht’s', 'Legt eure ersten Aufgaben an. Hier seht ihr dann jeden Tag, was ansteht und wie weit ihr seid.');
+    if (!S.tasks.length) return head + quickAdd() + emptyState('Los geht’s', 'Legt eure ersten Aufgaben an. Hier seht ihr dann jeden Tag, was ansteht und wie weit ihr seid.');
     var mine = S.scope === 'me';
     var L = mine ? S.tasks.filter(function (t) { return t.assignee === S.uid; }) : S.tasks;
     var st = stats(L), wk = weekBars(L), t0 = today();
@@ -426,13 +660,47 @@
     if (next.length) lists += '<section><div class="sec-h"><span>Als Nächstes</span></div>' + group(next) + '</section>';
     if (!lists) lists = '<div class="calm">' + I.calm + '<div><b>Alles im Griff</b><span>' + (mine ? 'Für dich ist heute nichts Dringendes offen.' : 'Im Team ist heute nichts Dringendes offen.') + '</span></div></div>';
 
-    return head + '<div class="scope">' + segc({ list: [{ k: 'me', l: 'Ich' }, { k: 'team', l: 'Team' }], sel: S.scope, action: 'scope', label: 'Ansicht' }) + '</div>' +
+    // Kennzahlen-Kacheln
+    var thisWeek = doneBetween(L, addDays(t0, -6), t0), lastWeek = doneBetween(L, addDays(t0, -13), addDays(t0, -7));
+    var trend = thisWeek === lastWeek ? '' : '<span class="trend ' + (thisWeek > lastWeek ? 'up' : 'down') + '">' + (thisWeek > lastWeek ? I.trendUp : I.trendDown) + Math.abs(thisWeek - lastWeek) + '</span>';
+    var sk = streak(L);
+    var kpis = '<div class="kpis">' +
+      '<div class="kpi"><span class="k-lbl">Offen</span><b>' + (st.open + st.work) + '</b><span class="k-sub">' + st.work + ' in Arbeit</span></div>' +
+      '<div class="kpi' + (overdue.length ? ' bad' : '') + '"><span class="k-lbl">Überfällig</span><b>' + overdue.length + '</b><span class="k-sub">' + dueToday.length + ' heute fällig</span></div>' +
+      '<div class="kpi"><span class="k-lbl">Diese Woche</span><b>' + thisWeek + trend + '</b><span class="k-sub">' + lastWeek + ' letzte Woche</span></div>' +
+      '<div class="kpi streak"><span class="k-lbl">Serie</span><b>' + (sk ? I.flame : '') + sk + '</b><span class="k-sub">' + (sk === 1 ? 'Tag' : 'Tage') + ' in Folge erledigt</span></div></div>';
+
+    // Fokus-Timer
+    var focus = '<section class="widget focus-w"><div class="w-head"><span class="w-title">' + I.timer + ' Fokus-Timer</span><span class="w-sub">Konzentriert arbeiten</span></div>' +
+      (S.focusEnd ? '<div class="focus-run"><span class="focus-big" data-focus-time>' + mmss(focusLeft()) + '</span><button type="button" class="btn-t" data-action="focus-stop">Beenden</button></div>'
+        : '<div class="focus-opts"><button type="button" class="btn-t" data-action="focus-start" data-min="15">15 Min</button><button type="button" class="btn-p" data-action="focus-start" data-min="25">25 Min</button><button type="button" class="btn-t" data-action="focus-start" data-min="50">50 Min</button></div>') + '</section>';
+
+    // Auslastung im Team oder anstehende Projekt-Deadlines
+    var side = '';
+    if (!mine && S.members.length > 1) {
+      var load = S.members.map(function (m) { return { id: m.user_id, n: S.tasks.filter(function (t) { return t.assignee === m.user_id && t.status !== 'erledigt'; }).length }; })
+        .sort(function (a, b) { return b.n - a.n; });
+      var mx = Math.max(1, load[0] ? load[0].n : 1);
+      side = '<section class="widget"><div class="w-head"><span class="w-title">Auslastung</span><span class="w-sub">offene Aufgaben</span></div><div class="loadlist">' +
+        load.map(function (x) { return '<div class="load">' + avatar(x.id, 's') + '<span class="ln">' + esc(who(x.id).first) + '</span><div class="pbar" style="--p:' + Math.round(x.n / mx * 100) + '%"><i></i></div><b>' + x.n + '</b></div>'; }).join('') + '</div></section>';
+    } else {
+      var dl = S.projects.filter(function (p) { return p.due && stats(S.tasks.filter(function (t) { return t.project_id === p.id; })).pct < 100; })
+        .sort(function (a, b) { return a.due < b.due ? -1 : 1; }).slice(0, 4);
+      side = '<section class="widget"><div class="w-head"><span class="w-title">Projekt-Deadlines</span><span class="w-sub">' + (dl.length ? 'als Nächstes' : '') + '</span></div>' +
+        (dl.length ? '<div class="loadlist">' + dl.map(function (p) {
+          var days = Math.round((parse(p.due) - parse(t0)) / 86400000), pst = stats(S.tasks.filter(function (t) { return t.project_id === p.id; }));
+          return '<button type="button" class="load link" data-action="open-project" data-id="' + esc(p.id) + '"><i class="dot" style="--c:var(--c-' + colorOf(p.color) + ')"></i><span class="ln">' + esc(p.name) + '</span>' + pbar(pst.pct, p.color) +
+            '<b class="' + (days < 0 ? 'bad' : days <= 3 ? 'warn' : '') + '">' + (days < 0 ? Math.abs(days) + ' T drüber' : days === 0 ? 'heute' : 'in ' + days + ' T') + '</b></button>';
+        }).join('') + '</div>' : '<p class="empty-col">Keine offenen Deadlines</p>') + '</section>';
+    }
+
+    return head + quickAdd() + '<div class="scope">' + segc({ list: [{ k: 'me', l: 'Ich' }, { k: 'team', l: 'Team' }], sel: S.scope, action: 'scope', label: 'Ansicht' }) + '</div>' + kpis +
       '<div class="widgets"><section class="widget"><div class="w-head"><span class="w-title">' + (mine ? 'Deine Aufgaben' : 'Team gesamt') + '</span><span class="w-sub">' + st.done + ' von ' + st.total + '</span></div>' +
       '<div class="ring-line">' + ring(st.pct) + '<div class="legend">' +
       '<div class="lg"><i class="dot" style="--c:var(--accent)"></i><span>Erledigt</span><b>' + st.done + '</b></div>' +
       '<div class="lg"><i class="dot" style="--c:var(--c-orange)"></i><span>In Arbeit</span><b>' + st.work + '</b></div>' +
       '<div class="lg"><i class="dot" style="--c:var(--label3)"></i><span>Offen</span><b>' + st.open + '</b></div></div></div></section>' +
-      '<section class="widget"><div class="w-head"><span class="w-title">Letzte 7 Tage</span><span class="w-sub">' + pl(wk.total, 'Aufgabe', 'Aufgaben') + ' erledigt</span></div><div class="bars">' + wk.html + '</div></section></div>' +
+      '<section class="widget"><div class="w-head"><span class="w-title">Letzte 7 Tage</span><span class="w-sub">' + pl(wk.total, 'Aufgabe', 'Aufgaben') + ' erledigt</span></div><div class="bars">' + wk.html + '</div></section>' + focus + side + '</div>' +
       '<div class="grid2">' + lists + '</div>';
   }
 
@@ -457,7 +725,7 @@
       } else items.sort(sortActive);
       if (q && !all.length) return '';
       return '<section data-col="' + key + '" class="' + (S.boardStatus === key ? 'active' : '') + '"><div class="sec-h"><span>' + SL[key] + '</span><span>' + all.length + '</span></div>' +
-        (items.length ? '<div class="group">' + items.map(row).join('') + more + '</div>' : '<p class="empty-col">Keine Aufgaben</p>') + '</section>';
+        (items.length ? '<div class="group">' + items.map(function (t) { return row(t, true); }).join('') + more + '</div>' : '<p class="empty-col">Keine Aufgaben</p>') + '</section>';
     }
     var html = sect('offen') + sect('arbeit') + sect('erledigt');
     return html || '<p class="empty-col">Keine Treffer für „' + esc(S.search) + '“</p>';
@@ -468,7 +736,7 @@
     var projOpts = '<option value="">Alle Projekte</option>' + S.projects.slice().sort(byName).map(function (p) {
       return '<option value="' + esc(p.id) + '"' + (S.filterProject === p.id ? ' selected' : '') + '>' + esc(p.name) + '</option>';
     }).join('');
-    return title + '<div class="board-bar"><div class="search">' + I.search + '<label class="vh" for="f-search">Aufgaben suchen</label><input id="f-search" type="search" placeholder="Suchen" autocomplete="off" value="' + esc(S.search) + '"></div>' +
+    return title + quickAdd() + '<div class="board-bar"><div class="search">' + I.search + '<label class="vh" for="f-search">Aufgaben suchen</label><input id="f-search" type="search" placeholder="Suchen" autocomplete="off" value="' + esc(S.search) + '"></div>' +
       '<div class="statseg">' + segc({ list: STATUS, sel: S.boardStatus, action: 'board-status', label: 'Status' }) + '</div>' +
       '<div class="filters">' + segc({ list: [{ k: 'all', l: 'Alle' }, { k: 'mine', l: 'Meine' }], sel: S.filterMine ? 'mine' : 'all', action: 'board-filter', cls: 'auto', label: 'Zuständigkeit' }) +
       '<label class="vh" for="f-project">Projekt filtern</label><select class="pill" id="f-project">' + projOpts + '</select></div></div>' +
@@ -508,6 +776,7 @@
       case 'deleted': return '<b>' + n + '</b> hat ' + t + ' gelöscht';
       case 'comment': return '<b>' + n + '</b> hat ' + t + ' kommentiert';
       case 'joined': return '<b>' + n + '</b> ist dem Team beigetreten';
+      case 'restored': return '<b>' + n + '</b> hat eine Sicherung wiederhergestellt';
       default: return '<b>' + n + '</b> hat etwas geändert';
     }
   }
@@ -534,6 +803,222 @@
       '<section><div class="sec-h"><span>Aktivität</span></div>' + feed + '</section></div>';
   }
 
+  /* ================= Ansicht: Kalender ================= */
+  var fmtMonth = new Intl.DateTimeFormat('de-DE', { month: 'long', year: 'numeric' });
+  function viewKalender() {
+    var t0 = today();
+    if (!S.calMonth) S.calMonth = monthStart(t0);
+    if (!S.calDay) S.calDay = t0;
+    var first = parse(S.calMonth), lead = (first.getDay() + 6) % 7, start = addDays(S.calMonth, -lead);
+    var L = S.tasks.filter(function (t) { return t.due && (!S.calMine || t.assignee === S.uid); });
+    var byDay = {};
+    L.forEach(function (t) { (byDay[t.due] = byDay[t.due] || []).push(t); });
+    var cells = '';
+    for (var i = 0; i < 42; i++) {
+      var d = addDays(start, i), list = (byDay[d] || []).sort(sortActive), inMonth = d.slice(0, 7) === S.calMonth.slice(0, 7);
+      if (i === 35 && !inMonth) break;
+      var chips = list.slice(0, 3).map(function (t) {
+        var p = t.project_id ? byId(S.projects, t.project_id) : null;
+        return '<span class="cal-chip' + (t.status === 'erledigt' ? ' done' : '') + '" draggable="true" data-task="' + esc(t.id) + '" style="--c:var(--c-' + colorOf(p ? p.color : 'blue') + ')">' + esc(t.title) + '</span>';
+      }).join('');
+      var late = list.some(function (t) { return t.status !== 'erledigt' && d < t0; });
+      cells += '<div role="button" tabindex="0" class="cal-day' + (inMonth ? '' : ' out') + (d === t0 ? ' today' : '') + (d === S.calDay ? ' sel' : '') + (late ? ' late' : '') + '" data-action="cal-day" data-day="' + d + '">' +
+        '<span class="cal-n">' + parse(d).getDate() + '</span>' + chips + (list.length > 3 ? '<span class="cal-more">+' + (list.length - 3) + '</span>' : '') +
+        (list.length ? '<span class="cal-dots">' + list.slice(0, 4).map(function () { return '<i></i>'; }).join('') + '</span>' : '') + '</div>';
+    }
+    var dayList = (byDay[S.calDay] || []).sort(sortActive);
+    var noDue = S.tasks.filter(function (t) { return !t.due && t.status !== 'erledigt' && (!S.calMine || t.assignee === S.uid); }).sort(sortActive);
+    return '<h1 class="large title-only">Kalender</h1>' +
+      '<div class="cal-bar"><div class="cal-nav"><button type="button" class="icon-btn" data-action="cal-prev" aria-label="Voriger Monat">' + I.left + '</button>' +
+      '<b class="cal-title">' + esc(fmtMonth.format(first)) + '</b><button type="button" class="icon-btn" data-action="cal-next" aria-label="Nächster Monat">' + I.right + '</button>' +
+      '<button type="button" class="txt-btn small" data-action="cal-today">Heute</button></div>' +
+      segc({ list: [{ k: 'all', l: 'Alle' }, { k: 'mine', l: 'Meine' }], sel: S.calMine ? 'mine' : 'all', action: 'cal-filter', cls: 'auto', label: 'Zuständigkeit' }) + '</div>' +
+      '<div class="cal-head">' + ['Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa', 'So'].map(function (x) { return '<span>' + x + '</span>'; }).join('') + '</div>' +
+      '<div class="cal-grid">' + cells + '</div>' +
+      '<div class="grid2"><section><div class="sec-h"><span>' + esc(fmtLong.format(parse(S.calDay))) + '</span><button type="button" class="txt-btn small" data-action="new-task-day">+ Aufgabe</button></div>' +
+      (dayList.length ? group(dayList) : '<p class="empty-col">Nichts geplant</p>') + '</section>' +
+      (noDue.length ? '<section><div class="sec-h"><span>Ohne Datum</span><span>' + noDue.length + '</span></div>' + group(noDue.slice(0, 8)) + '</section>' : '') + '</div>' +
+      '<p class="meta-line">Tipp: Am PC kannst du Aufgaben auf einen anderen Tag ziehen.</p>';
+  }
+  function moveDue(id, day) {
+    var t = byId(S.tasks, id); if (!t || t.due === day) return;
+    var prev = t.due; t.due = day; S.mine[id] = Date.now(); queue();
+    run(S.sb.from('tasks').update({ due: day }).eq('id', id).select().single())
+      .then(function (r) { if (r) upsert('tasks', r); toast('Verschoben auf ' + dueLabel(day)); queue(); })
+      .catch(function (e) { t.due = prev; toast(errText(e)); queue(); });
+  }
+
+  /* ================= Schnellsuche (Strg+K) ================= */
+  function palItems(q) {
+    q = q.trim().toLowerCase();
+    var acts = [
+      { l: 'Neue Aufgabe', h: 'N', run: function () { openSheet('task'); } },
+      { l: 'Neues Projekt', run: function () { openSheet('project'); } },
+      { l: 'Zu „Heute“', h: '1', run: function () { goTab('heute'); } },
+      { l: 'Zum Board', h: '2', run: function () { goTab('board'); } },
+      { l: 'Zum Kalender', h: '3', run: function () { goTab('kalender'); } },
+      { l: 'Zu den Projekten', h: '4', run: function () { goTab('projekte'); } },
+      { l: 'Zum Team', h: '5', run: function () { goTab('team'); } },
+      { l: S.focusEnd ? 'Fokus-Timer beenden' : 'Fokus-Timer starten (25 Min)', run: function () { S.focusEnd ? focusStop() : focusStart(25); } },
+      { l: 'Aufgaben als Excel/CSV exportieren', run: exportCsv },
+      { l: 'Sicherung als Datei herunterladen', run: exportJson },
+      { l: 'Design wechseln (hell/dunkel)', run: function () { ls(LS_THEME, document.documentElement.getAttribute('data-theme') === 'dark' || (theme() === 'auto' && matchMedia('(prefers-color-scheme: dark)').matches) ? 'light' : 'dark'); applyTheme(); } },
+      { l: 'Einstellungen', run: function () { openSheet('settings'); } }
+    ].filter(function (a) { return !q || a.l.toLowerCase().indexOf(q) >= 0; }).map(function (a) { a.kind = 'Befehl'; return a; });
+    var tasks = !q ? [] : S.tasks.filter(function (t) { return (t.title + ' ' + t.notes).toLowerCase().indexOf(q) >= 0; }).sort(sortActive).slice(0, 8)
+      .map(function (t) { return { l: t.title, kind: SL[t.status], done: t.status === 'erledigt', run: function () { openSheet('task', t.id); } }; });
+    var projs = !q ? [] : S.projects.filter(function (p) { return p.name.toLowerCase().indexOf(q) >= 0; }).slice(0, 4)
+      .map(function (p) { return { l: p.name, kind: 'Projekt', color: p.color, run: function () { openSheet('project', p.id); } }; });
+    return tasks.concat(projs, acts).slice(0, 14);
+  }
+  function openPalette() {
+    if (S.screen !== 'app') return;
+    if (S.sheet) closeSheet();
+    var el = $('palette');
+    el.innerHTML = '<div class="backdrop" data-action="pal-close"></div><div class="pal" role="dialog" aria-modal="true" aria-label="Schnellsuche"><div class="pal-in">' + I.search +
+      '<input id="pal-q" type="text" autocomplete="off" spellcheck="false" placeholder="Aufgaben, Projekte oder Befehle suchen …" aria-label="Suchen"><kbd>Esc</kbd></div><div class="pal-list" id="pal-list" role="listbox"></div></div>';
+    el.hidden = false; S.pal = { items: [], i: 0 };
+    palRender(); $('pal-q').focus();
+  }
+  function closePalette() { var el = $('palette'); if (!S.pal) return; S.pal = null; el.hidden = true; el.innerHTML = ''; }
+  function palRender() {
+    if (!S.pal) return;
+    S.pal.items = palItems($('pal-q').value);
+    if (S.pal.i >= S.pal.items.length) S.pal.i = 0;
+    $('pal-list').innerHTML = S.pal.items.length ? S.pal.items.map(function (x, i) {
+      return '<button type="button" role="option" class="pal-it' + (i === S.pal.i ? ' on' : '') + (x.done ? ' done' : '') + '" aria-selected="' + (i === S.pal.i) + '" data-action="pal-run" data-i="' + i + '">' +
+        (x.color ? '<i class="dot" style="--c:var(--c-' + colorOf(x.color) + ')"></i>' : '') + '<span class="grow">' + esc(x.l) + '</span><span class="pal-k">' + esc(x.kind) + '</span>' + (x.h ? '<kbd>' + esc(x.h) + '</kbd>' : '') + '</button>';
+    }).join('') : '<p class="empty-col">Nichts gefunden</p>';
+    var on = $('pal-list').querySelector('.on'); if (on && on.scrollIntoView) on.scrollIntoView({ block: 'nearest' });
+  }
+  function palRun(i) { var x = S.pal && S.pal.items[i]; closePalette(); if (x) x.run(); }
+  function goTab(t) { closeSheet(); if (S.tab !== t) { S.tab = t; S.animNext = true; render(); window.scrollTo(0, 0); } }
+
+  /* ================= Fokus starten/stoppen ================= */
+  function focusStart(min) { S.focusEnd = Date.now() + min * 60000; ls(LS_FOCUS, String(S.focusEnd)); toast('Fokus läuft: ' + min + ' Minuten'); render(); focusTick(); }
+  function focusStop() { S.focusEnd = 0; ls(LS_FOCUS, null); render(); focusTick(); }
+
+  /* ================= Benachrichtigungen ================= */
+  function notifyOn() { return ls(LS_NOTIFY) === '1' && typeof Notification !== 'undefined' && Notification.permission === 'granted'; }
+  function notify(title, body, taskId) {
+    if (!notifyOn()) return;
+    if (document.visibilityState === 'visible' && document.hasFocus()) return; // App ist offen: Toast reicht
+    try {
+      var n = new Notification(title, { body: body, icon: 'icons/icon-192.png', tag: taskId || undefined });
+      n.onclick = function () { window.focus(); if (taskId && byId(S.tasks, taskId)) openSheet('task', taskId); n.close(); };
+    } catch (e) {}
+  }
+  function dailyReminder() {
+    if (!notifyOn() || ls(LS_REMIND) === today()) return;
+    var t0 = today(), mine = S.tasks.filter(function (t) { return t.assignee === S.uid && t.status !== 'erledigt' && t.due && t.due <= t0; });
+    ls(LS_REMIND, t0);
+    if (mine.length) {
+      try { new Notification('Effectra: ' + pl(mine.length, 'Aufgabe', 'Aufgaben') + ' für heute', { body: mine.slice(0, 3).map(function (t) { return '• ' + t.title; }).join('\n'), icon: 'icons/icon-192.png' }); } catch (e) {}
+    }
+  }
+  function toggleNotify() {
+    if (typeof Notification === 'undefined') { toast('Dein Gerät unterstützt keine Benachrichtigungen.'); return; }
+    if (ls(LS_NOTIFY) === '1') { ls(LS_NOTIFY, null); toast('Benachrichtigungen aus'); refreshSettings(); return; }
+    Notification.requestPermission().then(function (p) {
+      if (p === 'granted') { ls(LS_NOTIFY, '1'); ls(LS_REMIND, null); toast('Benachrichtigungen an'); dailyReminder(); }
+      else toast('Benachrichtigungen wurden nicht erlaubt.');
+      refreshSettings();
+    });
+  }
+  function notifyChange(table, ev, row, prev) {
+    if (table === 'tasks' && row.assignee === S.uid && row.workspace_id === S.ws) {
+      var recent = S.mine[row.id] && Date.now() - S.mine[row.id] < 8000;
+      if (!recent && ((ev === 'INSERT' && row.created_by !== S.uid) || (ev === 'UPDATE' && prev && prev.assignee !== S.uid))) {
+        toastIfOpen('Dir wurde „' + row.title + '“ zugewiesen');
+        notify('Neue Aufgabe für dich', row.title, row.id);
+      }
+    }
+    if (table === 'activity' && ev === 'INSERT' && row.actor && row.actor !== S.uid) {
+      var t = row.task_id ? byId(S.tasks, row.task_id) : null;
+      var relevant = t && (t.assignee === S.uid || t.created_by === S.uid);
+      var name = who(row.actor).first;
+      if (row.kind === 'comment' && relevant) notify(name + ' hat kommentiert', row.title, row.task_id);
+      else if (row.kind === 'done' && relevant) notify(name + ' hat etwas erledigt', row.title, row.task_id);
+      else if (row.kind === 'joined') notify('Neues Teammitglied', name + ' ist dem Team beigetreten');
+    }
+  }
+  function toastIfOpen(msg) { if (document.visibilityState === 'visible') toast(msg); }
+
+  /* ================= Sicherung (Backup) ================= */
+  function download(name, text, type) {
+    var url = URL.createObjectURL(new Blob([text], { type: type }));
+    var a = document.createElement('a');
+    a.href = url; a.download = name;
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(function () { URL.revokeObjectURL(url); }, 5000);
+  }
+  function exportJson() {
+    var ws = currentWs();
+    var data = { app: 'Effectra', version: 1, exported_at: new Date().toISOString(), workspace: ws ? { id: ws.id, name: ws.name } : null,
+      projects: S.projects, tasks: S.tasks, subtasks: S.subtasks, comments: S.comments };
+    download('effectra-sicherung-' + today() + '.json', JSON.stringify(data, null, 2), 'application/json');
+    toast('Sicherung heruntergeladen');
+  }
+  function loadBackups() {
+    S.backups = null; S.backupErr = '';
+    return run(S.sb.from('backups').select('id,created_at,kind,size_bytes,created_by').eq('workspace_id', S.ws).order('created_at', { ascending: false }).limit(10))
+      .then(function (list) { S.backups = list || []; refreshSettings(); })
+      .catch(function (e) { S.backups = []; S.backupErr = missingTable(e) ? 'setup' : errText(e); refreshSettings(); });
+  }
+  function backupNow(btn) {
+    btn.disabled = true;
+    run(S.sb.rpc('create_backup', { p_ws: S.ws })).then(function () { toast('Sicherung in Supabase erstellt'); loadBackups(); },
+      function (e) { btn.disabled = false; toast(missingTable(e) ? 'Die Cloud-Sicherung ist noch nicht eingerichtet.' : errText(e)); });
+  }
+  function backupDownload(id) {
+    run(S.sb.from('backups').select('data,created_at').eq('id', id).single()).then(function (b) {
+      download('effectra-sicherung-' + ymd(new Date(b.created_at)) + '.json', JSON.stringify(b.data, null, 2), 'application/json');
+    }, function (e) { toast(errText(e)); });
+  }
+  function backupRestore(id, btn) {
+    btn.disabled = true;
+    run(S.sb.rpc('restore_backup', { p_backup: id })).then(function () { toast('Sicherung wiederhergestellt'); closeSheet(); loadWs(); },
+      function (e) { btn.disabled = false; toast(errText(e)); });
+  }
+  function backupList() {
+    if (S.backups === null) return '<div class="row-btn static"><span class="grow muted">Sicherungen werden geladen …</span></div>';
+    if (S.backupErr === 'setup') return '<div class="row-btn static"><span class="grow muted">Die automatische Cloud-Sicherung ist noch nicht eingerichtet.</span></div>';
+    if (S.backupErr) return '<div class="row-btn static"><span class="grow muted">' + esc(S.backupErr) + '</span></div>';
+    if (!S.backups.length) return '<div class="row-btn static"><span class="grow muted">Noch keine Sicherung vorhanden. Jede Nacht wird automatisch eine erstellt.</span></div>';
+    var owner = iAmOwner();
+    return S.backups.map(function (b) {
+      var d = new Date(b.created_at);
+      return '<div class="row backup-row"><span class="txt"><span>' + esc(fmtShort.format(d)) + ', ' + pad(d.getHours()) + ':' + pad(d.getMinutes()) + ' Uhr</span><span class="sub">' + (b.kind === 'auto' ? 'automatisch' : 'von ' + esc(who(b.created_by).first)) + ' · ' + Math.max(1, Math.round((b.size_bytes || 0) / 1024)) + ' KB</span></span>' +
+        '<button type="button" class="txt-btn small" data-action="backup-dl" data-id="' + esc(b.id) + '">Laden</button>' +
+        (owner ? '<button type="button" class="txt-btn small danger" data-action="backup-restore" data-id="' + esc(b.id) + '">' + (S.armed === 'restore:' + b.id ? 'Sicher? Aktueller Stand wird ersetzt' : 'Wiederherstellen') + '</button>' : '') + '</div>';
+    }).join('');
+  }
+  function refreshSettings() {
+    if (!S.sheet || S.sheet.kind !== 'settings') return;
+    var box = $('backup-list'); if (box) box.innerHTML = backupList();
+    var nb = $('notify-state'); if (nb) nb.textContent = notifyOn() ? 'An' : 'Aus';
+  }
+
+  /* ================= Handynummer im Konto ================= */
+  function phoneSave() {
+    var inp = $('s-phone'), err = function (m) { formError(m); };
+    if (S.phoneStep === 'code') {
+      var code = $('s-otp').value.replace(/\D/g, '');
+      if (code.length < 4) return err('Bitte gib den Code aus der SMS ein.');
+      S.sb.auth.verifyOtp({ phone: S.pendingPhone, token: code, type: 'phone_change' }).then(function (r) {
+        if (r.error) throw r.error;
+        S.phone = S.pendingPhone; S.phoneStep = ''; toast('Handynummer gespeichert'); openSheet('settings');
+      }).catch(function (e) { err(authErr(e)); });
+      return;
+    }
+    var phone = normPhone(inp.value);
+    if (!phone) return err('Bitte gib eine gültige Handynummer ein.');
+    S.sb.auth.updateUser({ phone: phone }).then(function (r) {
+      if (r.error) throw r.error;
+      S.pendingPhone = phone; S.phoneStep = 'code'; openSheet('settings');
+    }).catch(function (e) { err(authErr(e)); });
+  }
+
   /* ================= Zeichnen ================= */
   function render() {
     if (S.screen !== 'app') return;
@@ -547,11 +1032,15 @@
     var ws = currentWs();
     $('ws-name').textContent = ws ? ws.name : 'Effectra';
     $('me-btn').innerHTML = avatar(S.uid);
-    var active = document.activeElement, keepSearch = active && active.id === 'f-search', caret = keepSearch ? active.selectionStart : 0;
+    var active = document.activeElement, keepId = active && (active.id === 'f-search' || active.id === 'q-title') ? active.id : '', caret = keepId ? active.selectionStart : 0;
+    var qv = $('q-title') ? $('q-title').value : '';
     var v = $('view');
     v.classList.toggle('anim', S.animNext); S.animNext = false;
-    v.innerHTML = S.tab === 'board' ? viewBoard() : S.tab === 'projekte' ? viewProjekte() : S.tab === 'team' ? viewTeam() : viewHeute();
-    if (keepSearch) { var f = $('f-search'); if (f) { f.focus(); try { f.setSelectionRange(caret, caret); } catch (e) {} } }
+    v.innerHTML = S.tab === 'board' ? viewBoard() : S.tab === 'kalender' ? viewKalender() : S.tab === 'projekte' ? viewProjekte() : S.tab === 'team' ? viewTeam() : viewHeute();
+    if ($('q-title')) { $('q-title').value = qv; quickHint(); }
+    if (keepId) { var f = $(keepId); if (f) { f.focus(); try { f.setSelectionRange(caret, caret); } catch (e) {} } }
+    focusTick();
+    if (!S.reminded) { S.reminded = true; setTimeout(dailyReminder, 1500); }
   }
   function queue() {
     if (S.pending) return;
@@ -574,7 +1063,8 @@
   function taskSheet(id) {
     var t = id ? byId(S.tasks, id) : null;
     if (id && !t) return '';
-    var v = t || { title: '', notes: '', status: S.tab === 'board' ? S.boardStatus : 'offen', priority: 2, due: '', project_id: S.filterProject || '', assignee: S.uid };
+    var v = t || Object.assign({ title: '', notes: '', status: S.tab === 'board' ? S.boardStatus : 'offen', priority: 2, due: '', project_id: S.filterProject || '', assignee: S.uid }, S.preset || {});
+    S.preset = null;
     var projects = [{ k: '', l: 'Ohne Projekt' }].concat(S.projects.slice().sort(byName).map(function (p) { return { k: p.id, l: p.name }; }));
     var people = [{ k: '', l: 'Niemand' }].concat(S.members.map(function (m) { return { k: m.user_id, l: who(m.user_id).label }; }));
     var meta = t ? '<p class="meta-line">Angelegt ' + (t.created_by ? 'von ' + esc(who(t.created_by).name) + ' ' : '') + esc(ago(t.created_at)) + (t.done_at ? ' · erledigt ' + esc(ago(t.done_at)) : '') + '</p>' : '';
@@ -651,7 +1141,20 @@
     }).join('');
     return wrapForm('settings-form', '', head('Einstellungen', '', 'Fertig') +
       '<div class="sec-h"><span>Profil</span></div><div class="group"><div class="f row"><label class="vh" for="s-name">Dein Name</label><input id="s-name" type="text" maxlength="60" placeholder="Dein Name" value="' + esc(me.display_name || '') + '"><button type="button" class="txt-btn strong" data-action="save-name">Sichern</button></div>' +
-      '<div class="row-btn static"><span class="grow muted">' + esc(S.email) + '</span></div></div>' +
+      (S.email ? '<div class="row-btn static"><span class="grow muted">' + esc(S.email) + '</span></div>' : '') + '</div>' +
+      '<div class="sec-h"><span>SMS-Anmeldung</span><span>' + (S.phone ? esc(S.phone) : 'keine Nummer') + '</span></div><div class="group">' +
+      (S.phoneStep === 'code'
+        ? '<div class="f row"><label class="vh" for="s-otp">SMS-Code</label><input id="s-otp" type="text" inputmode="numeric" autocomplete="one-time-code" maxlength="8" placeholder="Code aus der SMS an ' + esc(S.pendingPhone) + '"><button type="button" class="txt-btn strong" data-action="save-phone">Bestätigen</button></div>'
+        : '<div class="f row"><label class="vh" for="s-phone">Handynummer</label><input id="s-phone" type="tel" inputmode="tel" maxlength="20" placeholder="' + (S.phone ? 'Neue Handynummer' : 'Handynummer hinzufügen') + '"><button type="button" class="txt-btn strong" data-action="save-phone">Code senden</button></div>') + '</div>' +
+      '<div class="sec-h"><span>Darstellung</span></div>' + segc({ list: THEMES, sel: theme(), action: 'theme', label: 'Design' }) +
+      '<div class="group" style="margin-top:12px"><button type="button" class="row-btn" data-action="toggle-notify"><span class="grow">Benachrichtigungen</span><span class="muted" id="notify-state">' + (notifyOn() ? 'An' : 'Aus') + '</span></button></div>' +
+      '<div class="sec-h"><span>Sicherung</span></div><div class="group">' +
+      '<button type="button" class="row-btn accent" data-action="backup-now"><span class="grow">' + I.cloud + ' Jetzt in Supabase sichern</span></button>' +
+      '<button type="button" class="row-btn accent" data-action="export-json"><span class="grow">Sicherung als Datei herunterladen</span></button>' +
+      '<button type="button" class="row-btn accent" data-action="export-csv"><span class="grow">Aufgaben als Excel/CSV exportieren</span></button></div>' +
+      '<div class="sec-h"><span>Letzte Cloud-Sicherungen</span></div><div class="group" id="backup-list">' + backupList() + '</div>' +
+      '<div class="sec-h"><span>Tastenkürzel</span></div><div class="group keys">' +
+      [['Strg + K', 'Schnellsuche'], ['N', 'Neue Aufgabe'], ['1 – 5', 'Bereich wechseln'], ['/', 'Schnell-Eingabe'], ['Esc', 'Schließen']].map(function (k) { return '<div class="row-btn static"><span class="grow">' + k[1] + '</span><kbd>' + k[0] + '</kbd></div>'; }).join('') + '</div>' +
       (owner ? '<div class="sec-h"><span>Teamname</span></div><div class="group"><div class="f row"><label class="vh" for="s-ws">Teamname</label><input id="s-ws" type="text" maxlength="60" value="' + esc(ws ? ws.name : '') + '"><button type="button" class="txt-btn strong" data-action="save-ws">Sichern</button></div></div>' : '') +
       '<div class="sec-h"><span>Teams</span></div><div class="group">' + switcher + '<button type="button" class="row-btn accent" data-action="onboard"><span class="grow">Team gründen oder beitreten</span><i class="chev"></i></button></div>' +
       '<div class="form-error" id="form-error" role="alert"></div>' +
@@ -670,6 +1173,7 @@
     el.innerHTML = html; el.hidden = false;
     document.documentElement.classList.add('lock');
     if (kind === 'task') refreshSheet();
+    if (kind === 'settings') loadBackups();
     if (!id && kind !== 'settings') { var first = el.querySelector('input[type="text"]'); if (first) first.focus(); }
   }
   function closeSheet() {
@@ -698,6 +1202,7 @@
     var data = { title: title, notes: g('t-notes').trim(), project_id: g('t-project') || null, assignee: g('t-assignee') || null,
       status: g('t-status'), priority: Number(g('t-priority')), due: g('t-due') || null };
     var id = form.dataset.id;
+    if (id) S.mine[id] = Date.now();
     lockSave(true);
     var job;
     if (id) {
@@ -868,11 +1373,38 @@
         break;
       case 'logout': closeSheet(); unsubscribe(); S.sb.auth.signOut(); break;
       case 'retry': start(); break;
+      case 'sms-reset': S.smsPhone = ''; authScreen(); break;
+      case 'save-phone': phoneSave(); break;
+      case 'theme': ls(LS_THEME, el.dataset.seg === 'auto' ? null : el.dataset.seg); applyTheme(); break;
+      case 'toggle-notify': toggleNotify(); break;
+      case 'backup-now': backupNow(el); break;
+      case 'backup-dl': backupDownload(id); break;
+      case 'backup-restore':
+        if (S.armed !== 'restore:' + id) { S.armed = 'restore:' + id; refreshSettings(); break; }
+        S.armed = null; backupRestore(id, el); break;
+      case 'export-json': exportJson(); break;
+      case 'export-csv': exportCsv(); break;
+      case 'focus-start': focusStart(Number(el.dataset.min) || 25); break;
+      case 'focus-stop': focusStop(); break;
+      case 'focus-pill': goTab('heute'); break;
+      case 'cal-prev': case 'cal-next':
+        var cm = parse(S.calMonth || monthStart(today())); cm.setMonth(cm.getMonth() + (a === 'cal-next' ? 1 : -1)); S.calMonth = ymd(cm); render(); break;
+      case 'cal-today': S.calMonth = monthStart(today()); S.calDay = today(); render(); break;
+      case 'cal-day':
+        if (e.target.closest('.cal-chip')) { openSheet('task', e.target.closest('.cal-chip').dataset.task); break; }
+        S.calDay = el.dataset.day; if (S.calDay.slice(0, 7) !== (S.calMonth || '').slice(0, 7)) S.calMonth = monthStart(S.calDay); render(); break;
+      case 'cal-filter': S.calMine = el.dataset.seg === 'mine'; setTimeout(render, 160); break;
+      case 'new-task-day': S.preset = { due: S.calDay }; openSheet('task'); break;
+      case 'palette': openPalette(); break;
+      case 'pal-close': closePalette(); break;
+      case 'pal-run': palRun(Number(el.dataset.i)); break;
     }
   });
 
   document.addEventListener('input', function (e) {
     if (e.target.id === 'f-search') { S.search = e.target.value; var c = $('board-cols'); c.classList.toggle('searching', !!S.search); c.innerHTML = boardCols(); }
+    else if (e.target.id === 'q-title') quickHint();
+    else if (e.target.id === 'pal-q') { if (S.pal) S.pal.i = 0; palRender(); }
     else if (e.target.id === 'c-new') { $('c-send').disabled = !e.target.value.trim(); autoGrow(e.target); }
   });
   document.addEventListener('change', function (e) {
@@ -882,7 +1414,21 @@
     else if (id === 'p-due') { var c2 = $('clear-pdue'); if (c2) c2.hidden = !e.target.value; }
   });
   document.addEventListener('keydown', function (e) {
+    if ((e.key === 'k' || e.key === 'K') && (e.ctrlKey || e.metaKey)) { e.preventDefault(); S.pal ? closePalette() : openPalette(); return; }
+    if (S.pal) {
+      if (e.key === 'Escape') { closePalette(); return; }
+      if (e.key === 'ArrowDown' || e.key === 'ArrowUp') { e.preventDefault(); var n = S.pal.items.length; if (n) { S.pal.i = (S.pal.i + (e.key === 'ArrowDown' ? 1 : n - 1)) % n; palRender(); } return; }
+      if (e.key === 'Enter') { e.preventDefault(); palRun(S.pal.i); return; }
+      return;
+    }
     if (e.key === 'Escape' && S.sheet) { closeSheet(); return; }
+    if (e.key === 'Enter' && e.target.matches && e.target.matches('[role="button"][data-action]')) { e.preventDefault(); e.target.click(); return; }
+    var typing = /^(INPUT|TEXTAREA|SELECT)$/.test(e.target.tagName) || e.target.isContentEditable;
+    if (!typing && !S.sheet && S.screen === 'app' && !e.ctrlKey && !e.metaKey && !e.altKey) {
+      if (e.key === 'n' || e.key === 'N') { e.preventDefault(); openSheet('task'); return; }
+      if (/^[1-5]$/.test(e.key)) { goTab(TABS[Number(e.key) - 1]); return; }
+      if (e.key === '/') { var qi = $('q-title') || $('f-search'); if (qi) { e.preventDefault(); qi.focus(); } return; }
+    }
     if (e.key === 'Enter' && e.target.id === 'sub-new') { e.preventDefault(); addSub(e.target); return; }
     if (e.key === 'Enter' && e.target.id === 'c-new' && (e.metaKey || e.ctrlKey)) { e.preventDefault(); sendComment(); }
   });
@@ -892,6 +1438,7 @@
     if (f.id === 'auth-form') authSubmit(f);
     else if (f.id === 'task-form') saveTask(f);
     else if (f.id === 'project-form') saveProject(f);
+    else if (f.id === 'quick-form') quickSubmit();
     else if (f.id === 'create-form') {
       var name = $('o-name').value.trim();
       if (!name) { onboardingScreen('Bitte gib einen Teamnamen ein.'); return; }
@@ -903,6 +1450,22 @@
       f.querySelector('button').disabled = true;
       run(S.sb.rpc('join_workspace', { p_code: code })).then(function (ws) { S.onbBack = false; ls(LS_WS, ws); S.tab = 'heute'; start(); }, function (er) { onboardingScreen(errText(er)); });
     }
+  });
+  document.addEventListener('dragstart', function (e) {
+    var r = e.target.closest && e.target.closest('[data-task][draggable]'); if (!r) return;
+    S.dragId = r.dataset.task; r.classList.add('dragging');
+    try { e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', S.dragId); } catch (er) {}
+  });
+  document.addEventListener('dragend', function () { S.dragId = null; document.querySelectorAll('.dragging,.drop-on').forEach(function (x) { x.classList.remove('dragging', 'drop-on'); }); });
+  function dropTarget(e) { return e.target.closest && (e.target.closest('.cols > section[data-col]') || e.target.closest('.cal-day')); }
+  document.addEventListener('dragover', function (e) {
+    if (!S.dragId) return; var t = dropTarget(e); if (!t) return;
+    e.preventDefault(); document.querySelectorAll('.drop-on').forEach(function (x) { if (x !== t) x.classList.remove('drop-on'); }); t.classList.add('drop-on');
+  });
+  document.addEventListener('drop', function (e) {
+    var t = dropTarget(e), id = S.dragId; if (!t || !id) return;
+    e.preventDefault(); t.classList.remove('drop-on');
+    if (t.dataset.col) setStatus(id, t.dataset.col, t); else if (t.dataset.day) moveDue(id, t.dataset.day);
   });
   document.addEventListener('visibilitychange', function () {
     if (document.visibilityState === 'visible' && S.screen === 'app' && Date.now() - S.lastLoad > 20000) loadWs();
@@ -928,6 +1491,7 @@
         authScreen(); return;
       }
       S.email = session.user.email || '';
+      S.phone = session.user.phone ? '+' + String(session.user.phone).replace(/^\+/, '') : '';
       if (uid !== S.uid) { S.uid = uid; setTimeout(start, 0); }
     });
   }
