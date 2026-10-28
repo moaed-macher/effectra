@@ -2,3 +2,8 @@ node_modules/
 desktop/web/
 desktop/dist/
 .env
+
+# Nur lokal (privat / nicht für die App nötig)
+effectra/README.md
+effectra/supabase/
+effectra/vercel.json
