@@ -841,7 +841,17 @@
     var on = $('pal-list').querySelector('.on'); if (on && on.scrollIntoView) on.scrollIntoView({ block: 'nearest' });
   }
   function palRun(i) { var x = S.pal && S.pal.items[i]; closePalette(); if (x) x.run(); }
-  function goTab(t) { closeSheet(); if (S.tab !== t) { S.tab = t; S.animNext = true; render(); window.scrollTo(0, 0); } }
+  // Weicher Wechsel zwischen den Bereichen (View Transitions, wo verfügbar)
+  function smooth(fn) {
+    var calm = false; try { calm = window.matchMedia('(prefers-reduced-motion: reduce)').matches; } catch (e) {}
+    if (document.startViewTransition && !calm) { S.animNext = false; document.startViewTransition(fn); } else { S.animNext = true; fn(); }
+  }
+  function goTab(t) {
+    closeSheet(); if (S.tab === t) return;
+    var dir = TABS.indexOf(t) > TABS.indexOf(S.tab) ? 'fwd' : 'back';
+    document.documentElement.dataset.nav = dir;
+    smooth(function () { S.tab = t; render(); window.scrollTo({ top: 0, behavior: 'instant' }); });
+  }
 
   /* ================= Fokus starten/stoppen ================= */
   function focusStart(min) { S.focusEnd = Date.now() + min * 60000; ls(LS_FOCUS, String(S.focusEnd)); toast('Fokus läuft: ' + min + ' Minuten'); render(); focusTick(); }
@@ -1204,7 +1214,7 @@
     var authLink = e.target.closest('[data-auth]');
     if (authLink) { S.authMode = authLink.dataset.auth; authScreen(); return; }
     var tab = e.target.closest('[data-tab]');
-    if (tab) { if (S.tab !== tab.dataset.tab) { S.tab = tab.dataset.tab; S.animNext = true; render(); window.scrollTo(0, 0); } return; }
+    if (tab) { goTab(tab.dataset.tab); return; }
     var sb = e.target.closest('.segc button');
     if (sb) segSelect(sb);
     var el = e.target.closest('[data-action]');

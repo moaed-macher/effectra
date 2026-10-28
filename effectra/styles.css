@@ -554,3 +554,71 @@ kbd { font: 600 11px/1 var(--mono); padding: 3px 6px; border-radius: 5px; backgr
 .confetti { position: fixed; z-index: 80; width: 0; height: 0; pointer-events: none; }
 .confetti i { position: absolute; width: 7px; height: 11px; border-radius: 2px; background: var(--k); animation: burst 0.9s var(--ease) forwards; }
 @keyframes burst { to { transform: translate(var(--dx), var(--dy)) rotate(var(--r)); opacity: 0; } }
+
+/* ===== Breiter und flüssiger (v1.2) ===== */
+html { scroll-behavior: smooth; }
+.shell { max-width: 1480px; }
+@media (min-width: 760px) {
+  body { padding-left: max(28px, env(safe-area-inset-left, 0px)); padding-right: max(28px, env(safe-area-inset-right, 0px)); }
+  .top { margin: 0 -28px; padding: 12px 28px; }
+  h1.large { font-size: 38px; }
+}
+@media (min-width: 1100px) {
+  body { padding-left: 40px; padding-right: 40px; }
+  .top { margin: 0 -40px; padding: 12px 40px; }
+  .grid2 { grid-template-columns: repeat(auto-fit, minmax(420px, 1fr)); gap: 0 28px; }
+  .panel { max-width: 680px; }
+  .cal-day { min-height: 122px; }
+  .cal-grid, .cal-head { gap: 8px; }
+}
+@media (min-width: 1300px) {
+  .widgets { grid-template-columns: repeat(4, 1fr); gap: 18px; }
+  .kpis { gap: 18px; }
+  .ring-line { gap: 16px; }
+  .ring-wrap, .ring-wrap svg { width: 104px; height: 104px; }
+  .ring-num { font-size: 28px; }
+  .cols { gap: 0 28px; }
+}
+
+/* Weiche Übergänge zwischen den Bereichen */
+@keyframes vt-in-f { from { opacity: 0; transform: translateX(24px); } }
+@keyframes vt-out-f { to { opacity: 0; transform: translateX(-24px); } }
+@keyframes vt-in-b { from { opacity: 0; transform: translateX(-24px); } }
+@keyframes vt-out-b { to { opacity: 0; transform: translateX(24px); } }
+#view { view-transition-name: view; }
+.top { view-transition-name: top; }
+.nav { view-transition-name: nav; }
+::view-transition-old(root), ::view-transition-new(root) { animation: none; }
+::view-transition-old(view) { animation: vt-out-f 0.22s var(--ease) both; }
+::view-transition-new(view) { animation: vt-in-f 0.34s var(--ease) both; }
+:root[data-nav="back"]::view-transition-old(view) { animation-name: vt-out-b; }
+:root[data-nav="back"]::view-transition-new(view) { animation-name: vt-in-b; }
+
+/* Mehr Gefühl bei Berührung und Maus */
+.row.task, .proj-row, .row-btn, .kpi, .cal-day, .pal-it, .tab, .btn-p, .btn-t, .add-top, .search-top, .icon-btn, .sw, .load.link { transition: background-color 0.18s ease, color 0.18s ease, box-shadow 0.25s var(--ease), transform 0.25s var(--ease), opacity 0.18s ease; }
+.btn-p:active, .btn-t:active, .add-top:active, .icon-btn:active, .search-top:active { transform: scale(0.96); }
+.kpi { position: relative; overflow: hidden; }
+.kpi::after { content: ""; position: absolute; inset: auto -30% -60% auto; width: 120px; height: 120px; border-radius: 50%; background: radial-gradient(circle, var(--accent-tint), transparent 70%); pointer-events: none; }
+@media (hover: hover) {
+  .kpi:hover { transform: translateY(-2px); box-shadow: var(--shadow-hover); }
+  .row.task:hover { background: color-mix(in srgb, var(--fill) 55%, transparent); }
+  .cal-day:hover { transform: translateY(-1px); }
+  .group:has(.row.task) { transition: box-shadow 0.25s var(--ease); }
+  .icon-btn:hover { background: var(--accent-tint); color: var(--accent); }
+}
+.tab[aria-current="page"] { transition: background-color 0.25s var(--ease), box-shadow 0.25s var(--ease), color 0.2s; }
+.state i { transition: background 0.3s var(--ease), border-color 0.3s var(--ease), transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1); }
+.state[data-s="erledigt"] i { transform: scale(1.06); }
+.row.task { transition: opacity 0.3s ease, background-color 0.18s ease; }
+.toast { animation: toast-in 0.35s cubic-bezier(0.34, 1.56, 0.64, 1) both; }
+@keyframes toast-in { from { opacity: 0; transform: translate(-50%, 12px) scale(0.96); } }
+.banner { animation: rise 0.4s var(--ease) both; }
+
+/* Schönere Scrollbalken am PC */
+@media (hover: hover) {
+  * { scrollbar-width: thin; scrollbar-color: var(--label3) transparent; }
+  ::-webkit-scrollbar { width: 10px; height: 10px; }
+  ::-webkit-scrollbar-thumb { background: var(--label3); border-radius: 10px; border: 3px solid transparent; background-clip: content-box; }
+  ::-webkit-scrollbar-track { background: transparent; }
+}
+@media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } }
