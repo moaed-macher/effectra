@@ -1,0 +1,9 @@
+// Effectra – Verbindung zu deinem Supabase-Projekt
+// Werte findest du in Supabase unter: Project Settings → API (oder "API Keys").
+// Der anon/publishable Key darf öffentlich sein: Die Sicherheitsregeln in der
+// Datenbank (supabase/schema.sql) schützen eure Daten.
+// NIEMALS den "service_role"- oder "secret"-Key hier eintragen!
+window.EFFECTRA_CONFIG = {
+  supabaseUrl: "https://pbvrgvokfsribeiecibf.supabase.co",
+  supabaseAnonKey: "sb_publishable_NHpVeo3X9MJfbDRFxHfEQg_jf2ercOU"
+};
