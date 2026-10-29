@@ -16,7 +16,9 @@ Die neueste Version gibt es unter **[Releases](../../releases/latest)**:
 - Board mit Ziehen & Ablegen, Kalender mit Monatsansicht
 - Schnell-Eingabe: „Kunde anrufen morgen #Projekt @Person !“
 - Schnellsuche mit Strg+K und Tastenkürzel
-- Tagesziel, Level, 17 Erfolge, Punkte und Feier beim Abhaken
+- Tagesziel mit „Als Nächstes“, Berichte (Durchsatz, Pünktlichkeit, Durchlaufzeit, Team)
+- Zeiterfassung mit Timer und Nachtragen, Export als CSV
+- Listenansicht mit Sortierung, Mehrfachauswahl und Sammelaktionen, Filter nach Termin und Priorität
 - Wiederkehrende Aufgaben („jeden mo“), Rückgängig, Duplizieren
 - Fokus-Timer, Benachrichtigungen, hell/dunkel
 - Anmeldung per E-Mail und Passwort
