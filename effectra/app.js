@@ -521,7 +521,7 @@
   function quickAdd() {
     return '<form class="quick" id="quick-form" novalidate><span class="plus" aria-hidden="true">+</span><label class="vh" for="q-title">Aufgabe schnell hinzufügen</label>' +
       '<input id="q-title" type="text" maxlength="250" autocomplete="off" enterkeyhint="done" placeholder="Neue Aufgabe … z. B. „Anrufen morgen !“">' +
-      '<button type="submit" class="txt-btn strong" id="q-add" disabled>Hinzufügen</button></form><div class="q-hint" id="q-hint" aria-live="polite"></div>';
+      aiBtn('ai-parse', 'KI', ' title="Mit KI in eine Aufgabe umwandeln" id="q-ai"') + '<button type="submit" class="txt-btn strong" id="q-add" disabled>Hinzufügen</button></form><div class="q-hint" id="q-hint" aria-live="polite"></div>';
   }
   function quickHint() {
     var inp = $('q-title'), h = $('q-hint'); if (!inp || !h) return;
@@ -663,7 +663,7 @@
         }).join('') + '</div>' : '<p class="empty-col">Keine offenen Deadlines</p>') + '</section>';
     }
 
-    return head + goalCard() + quickAdd() + '<div class="scope">' + segc({ list: [{ k: 'me', l: 'Ich' }, { k: 'team', l: 'Team' }], sel: S.scope, action: 'scope', label: 'Ansicht' }) + '</div>' + kpis +
+    return head + goalCard() + planCard() + quickAdd() + '<div class="scope-row"><span class="scope-ai">' + aiBtn('ai-plan', 'Tag planen') + '</span><div class="scope">' + segc({ list: [{ k: 'me', l: 'Ich' }, { k: 'team', l: 'Team' }], sel: S.scope, action: 'scope', label: 'Ansicht' }) + '</div></div>' + kpis +
       '<div class="widgets"><section class="widget"><div class="w-head"><span class="w-title">' + (mine ? 'Deine Aufgaben' : 'Team gesamt') + '</span><span class="w-sub">' + st.done + ' von ' + st.total + '</span></div>' +
       '<div class="ring-line">' + ring(st.pct) + '<div class="legend">' +
       '<div class="lg"><i class="dot" style="--c:var(--accent)"></i><span>Erledigt</span><b>' + st.done + '</b></div>' +
@@ -869,6 +869,7 @@
       S.animNext = false;
       try {
         var vt = document.startViewTransition(fn);
+        [vt.ready, vt.finished, vt.updateCallbackDone].forEach(function (p) { if (p && p.catch) p.catch(function () {}); });
         // Sicherheitsnetz: ein Übergang darf die App nie blockieren
         setTimeout(function () { try { vt.skipTransition(); } catch (e) {} }, 700);
       } catch (e) { fn(); }
@@ -1277,12 +1278,124 @@
       }).join('') + '</div></section>';
     return title + '<div class="rep-bar">' + segc({ list: [{ k: 'team', l: 'Team' }, { k: 'me', l: 'Ich' }], sel: scope, action: 'rep-scope', cls: 'auto', label: 'Bericht für' }) +
       '<span class="rep-act"><button type="button" class="txt-btn small" data-action="export-times">Zeiten exportieren (CSV)</button><button type="button" class="txt-btn small" data-action="export-csv">Aufgaben exportieren (CSV)</button></span></div>' +
-      kpis + '<div class="widgets rep">' + chart + timeW + projW + teamW + '</div>';
+      kpis + (aiOn() ? '<div class="ai-row">' + aiBtn('ai-week', 'Wochenrückblick schreiben') + '</div><div id="ai-week"></div>' : '') + '<div class="widgets rep">' + chart + timeW + projW + teamW + '</div>';
   }
   function isoWeek(s) {
     var d = parse(s); d.setDate(d.getDate() + 3 - (d.getDay() + 6) % 7);
     var w1 = new Date(d.getFullYear(), 0, 4);
     return 1 + Math.round(((d - w1) / 86400000 - 3 + (w1.getDay() + 6) % 7) / 7);
+  }
+
+  /* ================= KI-Assistent (Google Gemini über Supabase Edge Function) ================= */
+  var LS_AI = 'effectra.ai';
+  function aiOn() { return ls(LS_AI) !== '0'; }
+  var SPARK = '<svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 2.5l1.9 5.6 5.6 1.9-5.6 1.9L12 17.5l-1.9-5.6L4.5 10l5.6-1.9zM19 15l.9 2.1 2.1.9-2.1.9L19 21l-.9-2.1-2.1-.9 2.1-.9z"/></svg>';
+  function aiBtn(action, label, extra) {
+    return aiOn() ? '<button type="button" class="ai-btn" data-action="' + action + '"' + (extra || '') + '>' + SPARK + '<span>' + esc(label) + '</span></button>' : '';
+  }
+  function aiCall(action, payload) {
+    var body = Object.assign({ action: action, workspace_id: S.ws, today: today() }, payload);
+    return S.sb.functions.invoke('ai', { body: body }).then(function (r) {
+      if (r.error) {
+        var ctx = r.error.context;
+        if (ctx && typeof ctx.json === 'function') return ctx.json().then(function (j) { throw new Error((j && j.error) || 'Die KI ist gerade nicht erreichbar.'); }, function () { throw new Error('Die KI ist gerade nicht erreichbar.'); });
+        throw new Error(/Failed to fetch|NetworkError/i.test(r.error.message || '') ? 'Keine Verbindung.' : 'Die KI ist gerade nicht erreichbar.');
+      }
+      if (!r.data || r.data.error) throw new Error((r.data && r.data.error) || 'Keine Antwort von der KI.');
+      return r.data.result || {};
+    });
+  }
+  function aiBusy(btn, on) {
+    if (!btn) return;
+    btn.disabled = on; btn.classList.toggle('busy', on);
+    var s = btn.querySelector('span'); if (!s) return;
+    if (on) { btn.dataset.label = s.textContent; s.textContent = 'Denkt nach …'; } else if (btn.dataset.label) s.textContent = btn.dataset.label;
+  }
+  function taskBrief(t) {
+    var p = t.project_id ? byId(S.projects, t.project_id) : null;
+    return { title: t.title, due: t.due, priority: t.priority, status: t.status, project: p ? p.name : '', assignee: t.assignee ? who(t.assignee).first : '' };
+  }
+  function strList(v, max, len) { return (Array.isArray(v) ? v : []).map(function (x) { return String(x == null ? '' : x).trim().slice(0, len); }).filter(Boolean).slice(0, max); }
+
+  // 1) Unteraufgaben vorschlagen
+  function aiSubtasks(btn) {
+    var title = ($('t-title') || {}).value || '', notes = ($('t-notes') || {}).value || '';
+    if (!title.trim()) { formError('Gib zuerst einen Titel ein.'); return; }
+    aiBusy(btn, true);
+    aiCall('subtasks', { title: title.trim(), notes: notes.trim() }).then(function (r) {
+      S.aiSubs = strList(r.subtasks, 8, 200); renderAiSubs();
+    }, function (e) { toast(e.message); }).then(function () { aiBusy(btn, false); });
+  }
+  function renderAiSubs() {
+    var box = $('ai-subs'); if (!box) return;
+    if (!S.aiSubs || !S.aiSubs.length) { box.innerHTML = ''; return; }
+    box.innerHTML = '<div class="ai-card"><div class="ai-h">' + SPARK + '<b>Vorschläge</b><button type="button" class="txt-btn small strong" data-action="ai-subs-all">Alle übernehmen</button><button type="button" class="txt-btn small" data-action="ai-subs-close">Verwerfen</button></div>' +
+      S.aiSubs.map(function (x, i) { return '<button type="button" class="ai-sug" data-action="ai-sub-add" data-i="' + i + '"><span class="plus">+</span><span>' + esc(x) + '</span></button>'; }).join('') + '</div>';
+  }
+  function aiSubAdd(i) {
+    var title = S.aiSubs && S.aiSubs[i]; if (!title) return;
+    S.aiSubs.splice(i, 1); renderAiSubs();
+    if (!S.sheet.id) { S.draftSubs.push(title); renderSubs(); return; }
+    var list = subsOf(S.sheet.id), pos = list.length ? list[list.length - 1].position + 1 : 0;
+    run(S.sb.from('subtasks').insert({ task_id: S.sheet.id, workspace_id: S.ws, title: title, position: pos }).select().single())
+      .then(function (row) { upsert('subtasks', row); renderSubs(); queue(); }, function (e) { toast(errText(e)); });
+  }
+  function aiSubsAll() {
+    var all = (S.aiSubs || []).slice(); S.aiSubs = []; renderAiSubs();
+    if (!all.length) return;
+    if (!S.sheet.id) { S.draftSubs = S.draftSubs.concat(all); renderSubs(); return; }
+    var list = subsOf(S.sheet.id), pos = list.length ? list[list.length - 1].position + 1 : 0;
+    run(S.sb.from('subtasks').insert(all.map(function (t, k) { return { task_id: S.sheet.id, workspace_id: S.ws, title: t, position: pos + k }; })).select())
+      .then(function (rows) { (rows || []).forEach(function (r) { upsert('subtasks', r); }); renderSubs(); queue(); toast(pl(all.length, 'Unteraufgabe', 'Unteraufgaben') + ' übernommen'); }, function (e) { toast(errText(e)); });
+  }
+
+  // 2) Freitext → fertige Aufgabe (zum Prüfen im Formular)
+  function aiParse(btn) {
+    var inp = $('q-title'), text = inp ? inp.value.trim() : '';
+    if (!text) { toast('Schreib zuerst, was zu tun ist – z. B. „Lea soll bis Freitag das Angebot schicken“.'); if (inp) inp.focus(); return; }
+    aiBusy(btn, true);
+    aiCall('parse', { text: text, people: S.members.map(function (m) { return who(m.user_id).name; }), projects: S.projects.map(function (p) { return p.name; }) }).then(function (r) {
+      var pre = { title: String(r.title || text).slice(0, 200), notes: String(r.notes || '').slice(0, 2000), priority: [1, 2, 3].indexOf(Number(r.priority)) >= 0 ? Number(r.priority) : 2 };
+      if (/^\d{4}-\d{2}-\d{2}$/.test(r.due || '') && !isNaN(parse(r.due))) pre.due = r.due;
+      var an = squash(r.assignee || ''), pn = squash(r.project || '');
+      if (an) S.members.forEach(function (m) { if (squash(who(m.user_id).name) === an) pre.assignee = m.user_id; });
+      if (pn) S.projects.forEach(function (p) { if (squash(p.name) === pn) pre.project_id = p.id; });
+      inp.value = ''; quickHint();
+      S.preset = pre; openSheet('task');
+      formError(''); var m = $('form-error'); if (m) { m.classList.add('ai-note'); m.textContent = 'Von der KI ausgefüllt – bitte kurz prüfen und dann „Hinzufügen“.'; }
+    }, function (e) { toast(e.message); }).then(function () { aiBusy(btn, false); });
+  }
+
+  // 3) Tag planen
+  function aiPlan(btn) {
+    var open = S.tasks.filter(function (t) { return isMine(t) && t.status !== 'erledigt'; }).sort(sortActive).slice(0, 40);
+    if (!open.length) { toast('Für dich ist nichts offen.'); return; }
+    aiBusy(btn, true);
+    aiCall('plan', { tasks: open.map(taskBrief) }).then(function (r) {
+      var seen = {}, ids = (Array.isArray(r.order) ? r.order : []).map(Number).filter(function (i) { if (seen[i] || !open[i]) return false; seen[i] = true; return true; }).slice(0, 6).map(function (i) { return open[i].id; });
+      S.aiPlan = { day: today(), ids: ids, tip: String(r.tip || '').slice(0, 300) }; render();
+    }, function (e) { toast(e.message); }).then(function () { aiBusy(btn, false); });
+  }
+  function planCard() {
+    var p = S.aiPlan; if (!p || p.day !== today()) return '';
+    var L = p.ids.map(function (id) { return byId(S.tasks, id); }).filter(Boolean);
+    return '<section class="ai-card plan"><div class="ai-h">' + SPARK + '<b>Vorschlag für heute</b><button type="button" class="txt-btn small" data-action="ai-plan-close">Ausblenden</button></div>' +
+      (p.tip ? '<p class="ai-tip">' + esc(p.tip) + '</p>' : '') +
+      (L.length ? '<div class="group">' + L.map(function (t, i) { return '<div class="plan-row"><span class="plan-n">' + (i + 1) + '</span>' + row(t) + '</div>'; }).join('') + '</div>' : '<p class="empty-col">Kein Vorschlag</p>') + '</section>';
+  }
+
+  // 4) Projekt zusammenfassen, 5) Wochenrückblick
+  function aiSummary(btn, kind, pid) {
+    var L, name = '';
+    if (kind === 'project') { var p = byId(S.projects, pid); if (!p) return; name = p.name; L = S.tasks.filter(function (t) { return t.project_id === pid; }); }
+    else { var from = addDays(today(), -7); L = S.tasks.filter(function (t) { return (t.done_at && ymd(new Date(t.done_at)) >= from) || t.status !== 'erledigt'; }); }
+    if (!L.length) { toast('Dafür gibt es noch keine Aufgaben.'); return; }
+    aiBusy(btn, true);
+    aiCall('summary', { kind: kind, name: name, tasks: L.slice(0, 80).map(taskBrief) }).then(function (r) {
+      var html = '<div class="ai-card"><div class="ai-h">' + SPARK + '<b>' + (kind === 'week' ? 'Wochenrückblick' : 'Zusammenfassung') + '</b></div><p class="ai-tip">' + esc(String(r.text || '').slice(0, 900)) + '</p>' +
+        (strList(r.points, 4, 200).length ? '<ul class="ai-pts">' + strList(r.points, 4, 200).map(function (x) { return '<li>' + esc(x) + '</li>'; }).join('') + '</ul>' : '') + '</div>';
+      var box = $(kind === 'week' ? 'ai-week' : 'ai-proj'); if (box) box.innerHTML = html;
+    }, function (e) { toast(e.message); }).then(function () { aiBusy(btn, false); });
   }
 
   /* ================= Zeichnen ================= */
@@ -1345,7 +1458,7 @@
       '<label class="f row" for="t-repeat"><span class="lbl">Wiederholen</span><span class="val"><select id="t-repeat">' + opts(REPEAT, v.repeat || '') + '</select><i class="chev"></i></span></label></div>' +
       '<div class="sec-h"><span>Status</span></div>' + segc({ id: 't-status', list: STATUS, sel: v.status, label: 'Status' }) +
       '<div class="sec-h"><span>Priorität</span></div>' + segc({ id: 't-priority', list: PRIO, sel: v.priority, label: 'Priorität' }) +
-      '<div class="sec-h"><span>Unteraufgaben</span><span id="sub-count"></span></div><div class="group" id="subs"></div>' +
+      '<div class="sec-h"><span>Unteraufgaben</span><span class="sec-r"><span id="sub-count"></span>' + aiBtn('ai-subs', 'Vorschlagen') + '</span></div><div id="ai-subs"></div><div class="group" id="subs"></div>' +
       (t ? '<div class="sec-h"><span>Zeit</span><span id="time-total"></span></div><div class="group" id="times"></div>' : '') +
       (t ? '<div class="sec-h"><span>Kommentare</span></div><div class="group" id="comments"></div>' : '') +
       '<div class="form-error" id="form-error" role="alert"></div>' + meta +
@@ -1400,6 +1513,7 @@
       '<label class="f row" for="p-due"><span class="lbl">Deadline</span><span class="val"><button type="button" class="txt-btn" id="clear-pdue" data-action="clear-pdue"' + (p && p.due ? '' : ' hidden') + '>Entfernen</button><input id="p-due" type="date" value="' + esc(p && p.due ? p.due : '') + '"></span></label></div>' +
       '<div class="sec-h"><span>Farbe</span></div><div class="group"><div class="swatches" role="radiogroup" aria-label="Farbe">' + sw + '</div></div><input type="hidden" id="p-color" value="' + color + '">' +
       '<div class="form-error" id="form-error" role="alert"></div>' +
+      (p && aiOn() ? '<div class="ai-row" style="margin-top:18px">' + aiBtn('ai-proj', 'Stand zusammenfassen', ' data-id="' + esc(p.id) + '"') + '</div><div id="ai-proj"></div>' : '') +
       (p ? '<div class="group" style="margin-top:18px"><button type="button" class="row-btn accent" data-action="project-board" data-id="' + esc(p.id) + '"><span class="grow">Aufgaben im Board zeigen</span><i class="chev"></i></button></div>' +
         '<div class="group" style="margin-top:18px"><button type="button" class="row-btn destructive" data-action="delete-project">Projekt löschen</button></div><p class="meta-line">Beim Löschen bleiben die Aufgaben erhalten, sie stehen dann ohne Projekt da.</p>' : ''));
   }
@@ -1414,6 +1528,8 @@
       (S.email ? '<div class="row-btn static"><span class="grow muted">' + esc(S.email) + '</span></div>' : '') + '</div>' +
       '<div class="sec-h"><span>Tagesziel</span><span>Aufgaben pro Tag</span></div>' + segc({ list: [{ k: 1, l: '1' }, { k: 3, l: '3' }, { k: 5, l: '5' }, { k: 8, l: '8' }, { k: 12, l: '12' }], sel: goal(), action: 'goal', label: 'Tagesziel' }) +
       '<div class="group" style="margin-top:12px"><button type="button" class="row-btn" data-action="toggle-sound"><span class="grow">Ton beim Abhaken</span><span class="muted" id="sound-state">' + (soundOn() ? 'An' : 'Aus') + '</span></button></div>' +
+      '<div class="sec-h"><span>KI-Assistent</span></div><div class="group"><button type="button" class="row-btn" data-action="toggle-ai"><span class="grow">' + SPARK + ' KI-Funktionen anzeigen</span><span class="muted" id="ai-state">' + (aiOn() ? 'An' : 'Aus') + '</span></button></div>' +
+      '<p class="meta-line">Die KI (Google Gemini) läuft nur, wenn du auf einen ✦-Knopf klickst. Dabei werden die betroffenen Aufgabentitel an Google geschickt – im Gratis-Tarif kann Google sie zur Verbesserung nutzen. Nichts Vertrauliches eintragen. Höchstens 100 Anfragen pro Person und Tag.</p>' +
       '<div class="sec-h"><span>Darstellung</span></div>' + segc({ list: THEMES, sel: theme(), action: 'theme', label: 'Design' }) +
       '<div class="group" style="margin-top:12px"><button type="button" class="row-btn" data-action="toggle-notify"><span class="grow">Benachrichtigungen</span><span class="muted" id="notify-state">' + (notifyOn() ? 'An' : 'Aus') + '</span></button></div>' +
       '<div class="sec-h"><span>Sicherung</span></div><div class="group">' +
@@ -1435,7 +1551,7 @@
     var html = kind === 'task' ? taskSheet(id) : kind === 'project' ? projectSheet(id) : settingsSheet();
     if (!html) return;
     clearTimeout(S.closeTimer);
-    S.armed = null; S.sheet = { kind: kind, id: id || '' }; S.last = document.activeElement; S.draftSubs = [];
+    S.armed = null; S.aiSubs = []; S.sheet = { kind: kind, id: id || '' }; S.last = document.activeElement; S.draftSubs = [];
     var el = $('sheet');
     el.classList.remove('closing');
     el.innerHTML = html; el.hidden = false;
@@ -1608,6 +1724,16 @@
         S.sel = {}; if (!on) vis.forEach(function (t) { S.sel[t.id] = true; }); $('board-cols').innerHTML = boardCols(); break;
       case 'sel-clear': S.sel = {}; S.armed = null; $('board-cols').innerHTML = boardCols(); break;
       case 'bulk-del': if (S.armed !== 'bulk-del') { S.armed = 'bulk-del'; $('board-cols').innerHTML = boardCols(); break; } S.armed = null; bulkDelete(); break;
+      case 'ai-subs': aiSubtasks(el); break;
+      case 'ai-sub-add': aiSubAdd(Number(el.dataset.i)); break;
+      case 'ai-subs-all': aiSubsAll(); break;
+      case 'ai-subs-close': S.aiSubs = []; renderAiSubs(); break;
+      case 'ai-parse': aiParse(el); break;
+      case 'ai-plan': aiPlan(el); break;
+      case 'ai-plan-close': S.aiPlan = null; render(); break;
+      case 'ai-week': aiSummary(el, 'week'); break;
+      case 'ai-proj': aiSummary(el, 'project', id); break;
+      case 'toggle-ai': ls(LS_AI, aiOn() ? '0' : null); var as = $('ai-state'); if (as) as.textContent = aiOn() ? 'An' : 'Aus'; queue(); break;
       case 'toast-act': var fn = S.toastFn; S.toastFn = null; $('toast').hidden = true; if (fn) fn(); break;
       case 'goal': ls(LS_GOAL, el.dataset.seg); ls(LS_GOALDAY, null); queue(); break;
       case 'toggle-sound': ls(LS_SOUND, soundOn() ? null : '1'); var ss = $('sound-state'); if (ss) ss.textContent = soundOn() ? 'An' : 'Aus'; if (soundOn()) tone([784, 1175]); break;

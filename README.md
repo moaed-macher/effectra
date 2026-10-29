@@ -20,6 +20,7 @@ Die neueste Version gibt es unter **[Releases](../../releases/latest)**:
 - Zeiterfassung mit Timer und Nachtragen, Export als CSV
 - Listenansicht mit Sortierung, Mehrfachauswahl und Sammelaktionen, Filter nach Termin und Priorität
 - Wiederkehrende Aufgaben („jeden mo“), Rückgängig, Duplizieren
+- KI-Assistent (Google Gemini): Unteraufgaben vorschlagen, Freitext in Aufgabe umwandeln, Tag planen, Projekt- und Wochenzusammenfassung
 - Fokus-Timer, Benachrichtigungen, hell/dunkel
 - Anmeldung per E-Mail und Passwort
 - Tägliche Cloud-Sicherung in Supabase, Export als JSON und CSV
