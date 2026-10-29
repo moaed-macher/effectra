@@ -17,58 +17,107 @@
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="Effectra">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
-<link rel="stylesheet" href="styles.css">
+<link rel="stylesheet" href="styles.css?v=2.0.0">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.110.1/dist/umd/supabase.js" defer></script>
-<script src="config.js" defer></script>
-<script src="app.js" defer></script>
+<script src="config.js?v=2.0.0" defer></script>
+<script src="app.js?v=2.0.0" defer></script>
 </head>
 <body class="plain">
-  <div id="screen" class="shell"><p class="muted" style="text-align:center;margin-top:30vh">Effectra wird geladen …</p></div>
+  <div class="drag-bar" aria-hidden="true"></div>
+  <div id="screen" class="shell">
+    <div class="boot" aria-label="Effectra wird geladen">
+      <img src="icons/icon-192.png" alt="" width="64" height="64">
+      <div class="boot-bar"><i></i></div>
+    </div>
+  </div>
 
-  <div id="app" class="shell" hidden>
-    <header class="top">
-      <button class="brand" id="ws-btn" type="button" data-action="settings" aria-label="Team und Einstellungen">
-        <img class="mark" src="icons/icon-192.png" alt="" width="22" height="22"><span id="ws-name">Effectra</span>
+  <div id="app" class="app" hidden>
+    <aside class="side" id="side" aria-label="Navigation">
+      <div class="side-top">
+        <button class="brand" id="ws-btn" type="button" data-action="settings" aria-label="Team und Einstellungen">
+          <img class="mark" src="icons/icon-192.png" alt="" width="26" height="26"><span class="brand-t"><span id="ws-name">Effectra</span><small id="ws-sub">Team</small></span>
+        </button>
+        <button class="side-toggle" type="button" data-action="side-toggle" aria-label="Seitenleiste ein- oder ausklappen" title="Seitenleiste (Strg+B)">
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="3"/><path d="M9 4v16"/></svg>
+        </button>
+      </div>
+      <button class="side-search" type="button" data-action="palette" aria-label="Schnellsuche (Strg+K)">
+        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.5"/><path d="M20 20l-4.6-4.6"/></svg><span>Suchen</span><kbd>Strg K</kbd>
       </button>
       <nav class="nav" aria-label="Bereiche">
+        <span class="nav-ind" aria-hidden="true"></span>
         <button class="tab" data-tab="heute" type="button">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="4.5"/><path d="M12 2.5v2M12 19.5v2M4.6 4.6l1.4 1.4M18 18l1.4 1.4M2.5 12h2M19.5 12h2M4.6 19.4L6 18M18 6l1.4-1.4"/></svg>
-          <span>Heute</span>
+          <span class="tab-l">Heute</span><span class="tab-n" data-count="heute"></span>
         </button>
         <button class="tab" data-tab="board" type="button">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="5" height="16" rx="1.5"/><rect x="10" y="4" width="5" height="10" rx="1.5"/><rect x="17" y="4" width="4" height="13" rx="1.5"/></svg>
-          <span>Board</span>
+          <span class="tab-l">Board</span><span class="tab-n" data-count="board"></span>
         </button>
         <button class="tab" data-tab="kalender" type="button">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3.5" y="5" width="17" height="15.5" rx="2.5"/><path d="M3.5 10h17M8 3v4M16 3v4"/></svg>
-          <span>Kalender</span>
+          <span class="tab-l">Kalender</span><span class="tab-n" data-count="kalender"></span>
         </button>
         <button class="tab" data-tab="projekte" type="button">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 7.5A1.5 1.5 0 0 1 4.5 6h4.8l2 2.2h8.2A1.5 1.5 0 0 1 21 9.7v8.8a1.5 1.5 0 0 1-1.5 1.5h-15A1.5 1.5 0 0 1 3 18.5z"/></svg>
-          <span>Projekte</span>
+          <span class="tab-l">Projekte</span><span class="tab-n" data-count="projekte"></span>
         </button>
         <button class="tab" data-tab="berichte" type="button">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg>
-          <span>Berichte</span>
+          <span class="tab-l">Berichte</span><span class="tab-n" data-count="berichte"></span>
         </button>
         <button class="tab" data-tab="team" type="button">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20c0-3.6 2.9-6 6.5-6s6.5 2.4 6.5 6"/><path d="M16 4.6a3.5 3.5 0 0 1 0 6.8M18 14.3c2.1.7 3.5 2.8 3.5 5.7"/></svg>
-          <span>Team</span>
+          <span class="tab-l">Team</span><span class="tab-n" data-count="team"></span>
         </button>
       </nav>
-      <span class="spacer"></span>
-      <button class="timer-pill" id="timer-pill" type="button" data-action="timer-pill" hidden></button>
-      <button class="focus-pill" id="focus-pill" type="button" data-action="focus-pill" hidden></button>
-      <button class="search-top" type="button" data-action="palette" aria-label="Schnellsuche (Strg+K)"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.5"/><path d="M20 20l-4.6-4.6"/></svg><span>Suchen</span><kbd>Strg K</kbd></button>
-      <button class="add-top" id="add-top" data-action="new-task" type="button">+ Aufgabe</button>
-      <button class="me-btn" id="me-btn" type="button" data-action="settings" aria-label="Einstellungen"></button>
-    </header>
-    <div class="banner" id="banner" hidden></div>
-    <main id="view"></main>
+      <div class="side-sec" id="side-projects"></div>
+      <div class="side-foot">
+        <div class="side-upd" id="side-upd" hidden></div>
+        <div class="side-me">
+          <button class="me-line" type="button" data-action="settings" aria-label="Einstellungen" id="side-me"></button>
+          <button class="side-ic" type="button" data-action="trash" aria-label="Papierkorb" title="Papierkorb">
+            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7h16M9 7V4.5h6V7M6.5 7l1 13h9l1-13M10 11v5.5M14 11v5.5"/></svg>
+          </button>
+          <button class="side-ic" type="button" data-action="settings" aria-label="Einstellungen" title="Einstellungen">
+            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>
+          </button>
+        </div>
+        <div class="sync" id="sync"><i></i><span>Synchronisiert</span></div>
+      </div>
+    </aside>
+
+    <div class="main-col">
+      <header class="top">
+        <button class="brand m-brand" type="button" data-action="settings" aria-label="Team und Einstellungen">
+          <img class="mark" src="icons/icon-192.png" alt="" width="24" height="24"><span id="ws-name-m">Effectra</span>
+        </button>
+        <span class="spacer"></span>
+        <button class="upd-pill" id="upd-pill" type="button" data-action="update" hidden></button>
+        <button class="timer-pill" id="timer-pill" type="button" data-action="timer-pill" hidden></button>
+        <button class="focus-pill" id="focus-pill" type="button" data-action="focus-pill" hidden></button>
+        <button class="icon-btn m-only" type="button" data-action="palette" aria-label="Suchen">
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.5"/><path d="M20 20l-4.6-4.6"/></svg>
+        </button>
+        <button class="icon-btn bell" id="bell" type="button" data-action="inbox" aria-label="Mitteilungen">
+          <svg viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9a6 6 0 1 1 12 0c0 6 2.5 7.5 2.5 7.5h-17S6 15 6 9z"/><path d="M10 20a2.2 2.2 0 0 0 4 0"/></svg>
+          <span class="bell-n" id="bell-n" hidden></span>
+        </button>
+        <button class="add-top" id="add-top" data-action="new-task" type="button">
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.8" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg><span>Neue Aufgabe</span>
+        </button>
+        <button class="me-btn" id="me-btn" type="button" data-action="settings" aria-label="Einstellungen"></button>
+      </header>
+      <div class="banner" id="banner" hidden></div>
+      <main id="view"></main>
+    </div>
   </div>
-  <button class="fab" id="fab" data-action="new-task" type="button" hidden>+ Neue Aufgabe</button>
+  <button class="fab" id="fab" data-action="new-task" type="button" hidden aria-label="Neue Aufgabe">
+    <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
+  </button>
   <div class="sheet-wrap" id="sheet" hidden></div>
   <div class="pal-wrap" id="palette" hidden></div>
+  <div class="ctx" id="ctx" hidden role="menu"></div>
   <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
 </body>
 </html>

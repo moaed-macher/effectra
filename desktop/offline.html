@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; img-src 'self'">
+<title>Effectra – keine Verbindung</title>
+<style>
+  :root { color-scheme: light dark; --bg: #F2F2F7; --card: #FFFFFF; --label: #1C1C1E; --label2: rgba(60, 60, 67, 0.62); --accent: #007AFF; }
+  @media (prefers-color-scheme: dark) { :root { --bg: #000000; --card: #1C1C1E; --label: #FFFFFF; --label2: rgba(235, 235, 245, 0.6); --accent: #0A84FF; } }
+  html, body { height: 100%; margin: 0; }
+  body { display: grid; place-items: center; background: var(--bg); color: var(--label);
+    font: 15px/1.4 -apple-system, "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif; -webkit-font-smoothing: antialiased; }
+  .drag { position: fixed; inset: 0 0 auto 0; height: 44px; -webkit-app-region: drag; }
+  .card { width: min(380px, calc(100% - 32px)); padding: 32px 28px; border-radius: 22px; background: var(--card); text-align: center;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05), 0 16px 40px -12px rgba(0, 0, 0, 0.15); animation: rise 0.5s cubic-bezier(0.32, 0.72, 0, 1) both; }
+  img { width: 64px; height: 64px; border-radius: 16px; }
+  h1 { margin: 16px 0 6px; font-size: 22px; letter-spacing: -0.01em; }
+  p { margin: 0 0 22px; color: var(--label2); }
+  a { display: inline-flex; align-items: center; justify-content: center; height: 44px; padding: 0 22px; border-radius: 14px;
+    background: var(--accent); color: #FFFFFF; font-weight: 600; text-decoration: none; }
+  a:active { transform: scale(0.97); }
+  .dot { display: inline-block; width: 7px; height: 7px; margin-right: 6px; border-radius: 50%; background: #FF9500; animation: pulse 1.6s ease-in-out infinite; }
+  small { display: block; margin-top: 16px; color: var(--label2); }
+  @keyframes rise { from { opacity: 0; transform: translateY(10px) scale(0.98); } }
+  @keyframes pulse { 50% { opacity: 0.3; } }
+</style>
+</head>
+<body>
+  <div class="drag"></div>
+  <main class="card">
+    <img src="assets/icon.png" alt="">
+    <h1>Keine Verbindung</h1>
+    <p>Effectra braucht Internet, damit eure Aufgaben synchron bleiben.</p>
+    <a href="https://effectra.netlify.app/">Erneut versuchen</a>
+    <small><span class="dot"></span>Verbindet automatisch, sobald das Internet zurück ist.</small>
+  </main>
+</body>
+</html>

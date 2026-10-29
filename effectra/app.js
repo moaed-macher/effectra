@@ -3,6 +3,18 @@
   'use strict';
 
   /* ================= Konstanten ================= */
+  // Bei jeder Veröffentlichung erhöhen – gleich wie in version.json und den ?v= in index.html
+  var APP_VERSION = '2.0.0';
+  var CHANGES = [
+    'Updates direkt in der App – ein Klick, fertig',
+    'Neues Design: Seitenleiste, volle Breite, flüssigere Animationen',
+    'Papierkorb: gelöschte Aufgaben 30 Tage wiederherstellen',
+    'Mitteilungen mit Glocke: Zuweisungen, Kommentare, Erledigtes',
+    'Rechtsklick-Menü am PC, Wischen und langes Drücken am iPhone',
+    'Bessere Cloud-Sicherung: zusätzlich wöchentlich, ein halbes Jahr lang'
+  ];
+  var DESK = window.effectraDesktop || null; // nur in der Windows-App vorhanden
+  if (DESK) document.documentElement.classList.add('desk');
   var SL = { offen: 'Offen', arbeit: 'In Arbeit', erledigt: 'Erledigt' };
   var NEXT = { offen: 'arbeit', arbeit: 'erledigt', erledigt: 'offen' };
   var STATUS = [{ k: 'offen', l: 'Offen' }, { k: 'arbeit', l: 'In Arbeit' }, { k: 'erledigt', l: 'Erledigt' }];
@@ -33,7 +45,14 @@
     repeat: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17 2.5l3 3-3 3"/><path d="M4 11.5v-1a5 5 0 0 1 5-5h11M7 21.5l-3-3 3-3"/><path d="M20 12.5v1a5 5 0 0 1-5 5H4"/></svg>',
     timer: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="13.5" r="7.5"/><path d="M12 13.5V9.5M9.5 2.5h5"/></svg>',
     cloud: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 18.5a4.5 4.5 0 0 1-.6-8.96A6 6 0 0 1 18 9a4.75 4.75 0 0 1-.5 9.5z"/><path d="M12 11.5v5M9.8 14.3l2.2 2.2 2.2-2.2"/></svg>',
-    trendDown: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7l6 6 4-4 6 7"/><path d="M14 16h6v-6"/></svg>'
+    trendDown: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7l6 6 4-4 6 7"/><path d="M14 16h6v-6"/></svg>',
+    open: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 4h6v6M20 4l-8.5 8.5M18 14v4.5a1.5 1.5 0 0 1-1.5 1.5h-11A1.5 1.5 0 0 1 4 18.5v-11A1.5 1.5 0 0 1 5.5 6H10"/></svg>',
+    done: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M8 12.5l2.8 2.8L16.5 9"/></svg>',
+    undo: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 14L4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11"/></svg>',
+    play: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M10 8.5l5.5 3.5-5.5 3.5z"/></svg>',
+    user: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="8" r="4"/><path d="M4 20.5c0-4 3.6-6.5 8-6.5s8 2.5 8 6.5"/></svg>',
+    copy: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="8.5" y="8.5" width="12" height="12" rx="2.5"/><path d="M15.5 8.5V5.5A2 2 0 0 0 13.5 3.5h-8a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h3"/></svg>',
+    trash: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7h16M9 7V4.5h6V7M6.5 7l1 13h9l1-13M10 11v5.5M14 11v5.5"/></svg>'
   };
 
   /* ================= Zustand ================= */
@@ -44,10 +63,13 @@
     sheet: null, armed: null, draftSubs: [], channel: null, live: true, lastLoad: 0, loadSeq: 0,
     hold: 0, pending: false, animNext: true, toastTimer: 0, closeTimer: 0, busy: {}, onbBack: false,
     calMonth: '', calDay: '', calMine: false, preset: null, dragId: null, focusEnd: 0,
-    time_entries: [], sel: {}, boardView: 'cols', filterDue: '', filterPrio: '', sortKey: 'due', sortDir: 1, repScope: 'team', backups: null, backupErr: '', mine: {}, pal: null
+    time_entries: [], sel: {}, boardView: 'cols', filterDue: '', filterPrio: '', sortKey: 'due', sortDir: 1, repScope: 'team', backups: null, backupErr: '', mine: {}, pal: null,
+    trash: null, trashErr: '', ctx: null, webUpd: null, deskUpd: null, deskInfo: null, countNext: false, swallow: 0
   };
   var LS_NOTIFY = 'effectra.notify';
   var LS_REMIND = 'effectra.remind';
+  var LS_SIDE = 'effectra.side';
+  var LS_SEEN = 'effectra.seen';
   function $(id) { return document.getElementById(id); }
 
   /* ================= Hilfen ================= */
@@ -94,11 +116,29 @@
 
   /* ================= Design (hell/dunkel) ================= */
   function theme() { var t = ls(LS_THEME); return t === 'light' || t === 'dark' ? t : 'auto'; }
+  var darkMq = window.matchMedia ? window.matchMedia('(prefers-color-scheme: dark)') : null;
+  function isDark() { var t = theme(); return t === 'dark' || (t === 'auto' && !!darkMq && darkMq.matches); }
+  function calmMotion() { try { return window.matchMedia('(prefers-reduced-motion: reduce)').matches; } catch (e) { return false; } }
   function applyTheme() {
     var t = theme(), root = document.documentElement;
     if (t === 'auto') root.removeAttribute('data-theme'); else root.setAttribute('data-theme', t);
+    if (DESK) { try { DESK.setTheme(isDark()); } catch (e) {} } // Fensterknöpfe passend färben
   }
   applyTheme();
+  if (darkMq && darkMq.addEventListener) darkMq.addEventListener('change', applyTheme);
+  // Weiches Überblenden beim Wechsel hell/dunkel
+  function switchTheme(t) {
+    var go = function () { ls(LS_THEME, t === 'auto' ? null : t); applyTheme(); };
+    var root = document.documentElement;
+    if (!document.startViewTransition || calmMotion() || document.visibilityState !== 'visible') { go(); return; }
+    root.classList.add('theming');
+    var done = function () { root.classList.remove('theming'); };
+    try {
+      var vt = document.startViewTransition(go);
+      vt.finished.then(done, done);
+      setTimeout(function () { try { vt.skipTransition(); } catch (e) {} done(); }, 900);
+    } catch (e) { go(); done(); }
+  }
 
   /* ================= Schnell-Eingabe: „Mail an Kunde morgen #Website @Max !“ ================= */
   function squash(s) { return String(s || '').toLowerCase().replace(/\s+/g, ''); }
@@ -392,13 +432,15 @@
       q('tasks', '*'),
       q('subtasks', '*'),
       q('comments', '*'),
-      run(S.sb.from('activity').select('*').eq('workspace_id', id).order('id', { ascending: false }).limit(60)),
+      run(S.sb.from('activity').select('*').eq('workspace_id', id).order('id', { ascending: false }).limit(100)),
       q('time_entries', '*').catch(function () { return []; })
     ]).then(function (r) {
       if (seq !== S.loadSeq || id !== S.ws) return;
       S.members = r[0] || []; S.projects = r[1] || []; S.tasks = r[2] || []; S.subtasks = r[3] || []; S.comments = r[4] || []; S.activity = r[5] || []; S.time_entries = r[6] || [];
       S.lastLoad = Date.now();
       if (!S.members.some(function (m) { return m.user_id === S.uid; })) { ls(LS_WS, null); S.ws = null; return start(); }
+      // Beim allerersten Mal gilt alles Bisherige als gelesen
+      if (ls(inboxKey()) === null) ls(inboxKey(), String(S.activity.length ? S.activity[0].id : 0));
       return loadProfiles().then(function () { S.screen = 'app'; S.animNext = true; render(); refreshSheet(); });
     });
   }
@@ -441,6 +483,12 @@
     var b = $('banner');
     b.hidden = on;
     b.textContent = on ? '' : 'Offline – Änderungen anderer erscheinen, sobald die Verbindung zurück ist.';
+    syncState();
+  }
+  function syncState() {
+    var s = $('sync'); if (!s) return;
+    s.classList.toggle('off', !S.live);
+    s.lastChild.textContent = S.live ? 'Synchronisiert' : 'Offline – verbindet neu …';
   }
   function onChange(table, p) {
     var ev = p.eventType, row = p.new || {}, old = p.old || {};
@@ -466,7 +514,7 @@
       var prevRow = byId(S[key], row.id); prevRow = prevRow ? Object.assign({}, prevRow) : null;
       upsert(key, row);
       notifyChange(table, ev, row, prevRow);
-      if (table === 'activity') { S.activity.sort(function (a, b) { return b.id - a.id; }); S.activity = S.activity.slice(0, 60); }
+      if (table === 'activity') { S.activity.sort(function (a, b) { return b.id - a.id; }); S.activity = S.activity.slice(0, 100); }
     }
     queue();
     if (S.sheet && S.sheet.kind === 'task' && (table === 'subtasks' || table === 'comments' || table === 'time_entries')) refreshSheet();
@@ -479,6 +527,20 @@
   }
 
   /* ================= Bausteine ================= */
+  function num(n) { return '<span data-n="' + Number(n) + '">' + Number(n) + '</span>'; }
+  // Zahlen beim Öffnen weich hochzählen
+  function countUp() {
+    var els = document.querySelectorAll('#view [data-n]');
+    if (!els.length || calmMotion()) return;
+    var t0 = 0, D = 650;
+    function step(now) {
+      if (!t0) t0 = now;
+      var k = Math.min(1, (now - t0) / D), e = 1 - Math.pow(1 - k, 3);
+      for (var i = 0; i < els.length; i++) els[i].textContent = String(Math.round(Number(els[i].dataset.n) * e));
+      if (k < 1) requestAnimationFrame(step);
+    }
+    requestAnimationFrame(step);
+  }
   function pbar(p, color) {
     return '<div class="pbar' + (p === 100 ? ' done' : '') + '" style="--p:' + p + '%' + (color ? ';--c:var(--c-' + colorOf(color) + ')' : '') + '" role="img" aria-label="' + p + ' Prozent erledigt"><i></i></div>';
   }
@@ -634,10 +696,10 @@
     var trend = thisWeek === lastWeek ? '' : '<span class="trend ' + (thisWeek > lastWeek ? 'up' : 'down') + '">' + (thisWeek > lastWeek ? I.trendUp : I.trendDown) + Math.abs(thisWeek - lastWeek) + '</span>';
     var sk = streak(L);
     var kpis = '<div class="kpis">' +
-      '<div class="kpi"><span class="k-lbl">Offen</span><b>' + (st.open + st.work) + '</b><span class="k-sub">' + st.work + ' in Arbeit</span></div>' +
-      '<div class="kpi' + (overdue.length ? ' bad' : '') + '"><span class="k-lbl">Überfällig</span><b>' + overdue.length + '</b><span class="k-sub">' + dueToday.length + ' heute fällig</span></div>' +
-      '<div class="kpi"><span class="k-lbl">Diese Woche</span><b>' + thisWeek + trend + '</b><span class="k-sub">' + lastWeek + ' letzte Woche</span></div>' +
-      '<div class="kpi streak"><span class="k-lbl">Serie</span><b>' + (sk ? I.flame : '') + sk + '</b><span class="k-sub">' + (sk === 1 ? 'Tag' : 'Tage') + ' in Folge erledigt</span></div></div>';
+      '<div class="kpi"><span class="k-lbl">Offen</span><b>' + num(st.open + st.work) + '</b><span class="k-sub">' + st.work + ' in Arbeit</span></div>' +
+      '<div class="kpi' + (overdue.length ? ' bad' : '') + '"><span class="k-lbl">Überfällig</span><b>' + num(overdue.length) + '</b><span class="k-sub">' + dueToday.length + ' heute fällig</span></div>' +
+      '<div class="kpi"><span class="k-lbl">Diese Woche</span><b>' + num(thisWeek) + trend + '</b><span class="k-sub">' + lastWeek + ' letzte Woche</span></div>' +
+      '<div class="kpi streak"><span class="k-lbl">Serie</span><b>' + (sk ? I.flame : '') + num(sk) + '</b><span class="k-sub">' + (sk === 1 ? 'Tag' : 'Tage') + ' in Folge erledigt</span></div></div>';
 
     // Fokus-Timer
     var focus = '<section class="widget focus-w"><div class="w-head"><span class="w-title">' + I.timer + ' Fokus-Timer</span><span class="w-sub">Konzentriert arbeiten</span></div>' +
@@ -745,6 +807,7 @@
       case 'comment': return '<b>' + n + '</b> hat ' + t + ' kommentiert';
       case 'joined': return '<b>' + n + '</b> ist dem Team beigetreten';
       case 'restored': return '<b>' + n + '</b> hat eine Sicherung wiederhergestellt';
+      case 'restored_task': return '<b>' + n + '</b> hat ' + t + ' aus dem Papierkorb geholt';
       default: return '<b>' + n + '</b> hat etwas geändert';
     }
   }
@@ -832,7 +895,13 @@
       { l: S.focusEnd ? 'Fokus-Timer beenden' : 'Fokus-Timer starten (25 Min)', run: function () { S.focusEnd ? focusStop() : focusStart(25); } },
       { l: 'Aufgaben als Excel/CSV exportieren', run: exportCsv },
       { l: 'Sicherung als Datei herunterladen', run: exportJson },
-      { l: 'Design wechseln (hell/dunkel)', run: function () { ls(LS_THEME, document.documentElement.getAttribute('data-theme') === 'dark' || (theme() === 'auto' && matchMedia('(prefers-color-scheme: dark)').matches) ? 'light' : 'dark'); applyTheme(); } },
+      { l: 'Design wechseln (hell/dunkel)', run: function () { switchTheme(isDark() ? 'light' : 'dark'); } },
+      { l: 'Mitteilungen', run: function () { openSheet('inbox'); } },
+      { l: 'Papierkorb', run: function () { openSheet('trash'); } },
+      { l: 'Nach Updates suchen', run: function () { manualCheck(); } },
+      { l: 'Was ist neu', run: function () { openSheet('whatsnew'); } },
+      { l: 'Seitenleiste ein-/ausklappen', h: 'Strg B', run: toggleSide },
+      { l: 'Tastenkürzel', h: '?', run: function () { openSheet('keys'); } },
       { l: 'Einstellungen', run: function () { openSheet('settings'); } }
     ].filter(function (a) { return !q || a.l.toLowerCase().indexOf(q) >= 0; }).map(function (a) { a.kind = 'Befehl'; return a; });
     var tasks = !q ? [] : S.tasks.filter(function (t) { return (t.title + ' ' + t.notes).toLowerCase().indexOf(q) >= 0; }).sort(sortActive).slice(0, 8)
@@ -876,10 +945,13 @@
     } else { S.animNext = true; fn(); }
   }
   function goTab(t) {
-    closeSheet(); if (S.tab === t) return;
+    closeSheet(); ctxClose(); if (S.tab === t) return;
     var dir = TABS.indexOf(t) > TABS.indexOf(S.tab) ? 'fwd' : 'back';
     document.documentElement.dataset.nav = dir;
+    S.countNext = true;
     smooth(function () { S.tab = t; render(); window.scrollTo({ top: 0, behavior: 'instant' }); });
+    var tb = document.querySelector('.tab[data-tab="' + t + '"]');
+    if (tb) { tb.classList.remove('bump'); void tb.offsetWidth; tb.classList.add('bump'); setTimeout(function () { tb.classList.remove('bump'); }, 520); }
   }
 
   /* ================= Fokus starten/stoppen ================= */
@@ -943,13 +1015,13 @@
   function exportJson() {
     var ws = currentWs();
     var data = { app: 'Effectra', version: 1, exported_at: new Date().toISOString(), workspace: ws ? { id: ws.id, name: ws.name } : null,
-      projects: S.projects, tasks: S.tasks, subtasks: S.subtasks, comments: S.comments };
+      projects: S.projects, tasks: S.tasks, subtasks: S.subtasks, comments: S.comments, time_entries: S.time_entries };
     download('effectra-sicherung-' + today() + '.json', JSON.stringify(data, null, 2), 'application/json');
     toast('Sicherung heruntergeladen');
   }
   function loadBackups() {
     S.backups = null; S.backupErr = '';
-    return run(S.sb.from('backups').select('id,created_at,kind,size_bytes,created_by').eq('workspace_id', S.ws).order('created_at', { ascending: false }).limit(10))
+    return run(S.sb.from('backups').select('id,created_at,kind,size_bytes,created_by,stats').eq('workspace_id', S.ws).order('created_at', { ascending: false }).limit(20))
       .then(function (list) { S.backups = list || []; refreshSettings(); })
       .catch(function (e) { S.backups = []; S.backupErr = missingTable(e) ? 'setup' : errText(e); refreshSettings(); });
   }
@@ -974,9 +1046,14 @@
     if (S.backupErr) return '<div class="row-btn static"><span class="grow muted">' + esc(S.backupErr) + '</span></div>';
     if (!S.backups.length) return '<div class="row-btn static"><span class="grow muted">Noch keine Sicherung vorhanden. Jede Nacht wird automatisch eine erstellt.</span></div>';
     var owner = iAmOwner();
+    var KIND = { auto: 'Täglich', weekly: 'Wöchentlich', manual: 'Manuell', 'pre-restore': 'Vor Wiederherstellung' };
     return S.backups.map(function (b) {
-      var d = new Date(b.created_at);
-      return '<div class="row backup-row"><span class="txt"><span>' + esc(fmtShort.format(d)) + ', ' + pad(d.getHours()) + ':' + pad(d.getMinutes()) + ' Uhr</span><span class="sub">' + (b.kind === 'auto' ? 'automatisch' : 'von ' + esc(who(b.created_by).first)) + ' · ' + Math.max(1, Math.round((b.size_bytes || 0) / 1024)) + ' KB</span></span>' +
+      var d = new Date(b.created_at), st = b.stats || {}, bits = [];
+      if (st.tasks != null) bits.push(pl(st.tasks, 'Aufgabe', 'Aufgaben'));
+      if (st.projects != null) bits.push(pl(st.projects, 'Projekt', 'Projekte'));
+      bits.push(Math.max(1, Math.round((b.size_bytes || 0) / 1024)) + ' KB');
+      if (b.kind !== 'auto' && b.kind !== 'weekly' && b.created_by) bits.push('von ' + who(b.created_by).first);
+      return '<div class="row backup-row"><span class="txt"><span><span class="kind ' + esc(b.kind) + '">' + esc(KIND[b.kind] || b.kind) + '</span> ' + esc(fmtShort.format(d)) + ', ' + pad(d.getHours()) + ':' + pad(d.getMinutes()) + ' Uhr</span><span class="sub">' + esc(bits.join(' · ')) + '</span></span>' +
         '<button type="button" class="txt-btn small" data-action="backup-dl" data-id="' + esc(b.id) + '">Laden</button>' +
         (owner ? '<button type="button" class="txt-btn small danger" data-action="backup-restore" data-id="' + esc(b.id) + '">' + (S.armed === 'restore:' + b.id ? 'Sicher? Aktueller Stand wird ersetzt' : 'Wiederherstellen') + '</button>' : '') + '</div>';
     }).join('');
@@ -985,6 +1062,304 @@
     if (!S.sheet || S.sheet.kind !== 'settings') return;
     var box = $('backup-list'); if (box) box.innerHTML = backupList();
     var nb = $('notify-state'); if (nb) nb.textContent = notifyOn() ? 'An' : 'Aus';
+    var us = $('upd-state'); if (us) us.textContent = updStateText();
+  }
+
+  /* ================= Papierkorb ================= */
+  function loadTrash() {
+    S.trash = null; S.trashErr = '';
+    return run(S.sb.from('trash').select('id,title,deleted_by,deleted_at').eq('workspace_id', S.ws).order('deleted_at', { ascending: false }).limit(100))
+      .then(function (list) { S.trash = list || []; refreshTrash(); })
+      .catch(function (e) { S.trash = []; S.trashErr = missingTable(e) ? 'setup' : errText(e); refreshTrash(); });
+  }
+  function trashList() {
+    if (S.trash === null) return '<div class="row-btn static"><span class="grow muted">Wird geladen …</span></div>';
+    if (S.trashErr === 'setup') return '<div class="row-btn static"><span class="grow muted">Der Papierkorb ist noch nicht eingerichtet.</span></div>';
+    if (S.trashErr) return '<div class="row-btn static"><span class="grow muted">' + esc(S.trashErr) + '</span></div>';
+    if (!S.trash.length) return '<div class="row-btn static"><span class="grow muted">Der Papierkorb ist leer.</span></div>';
+    return S.trash.map(function (x) {
+      var left = Math.max(0, 30 - Math.floor((Date.now() - new Date(x.deleted_at).getTime()) / 86400000));
+      var armed = S.armed === 'purge:' + x.id;
+      return '<div class="row trash-row"><span class="txt"><span class="ttl">' + esc(x.title) + '</span><span class="sub"><span class="it">' +
+        (x.deleted_by ? 'von ' + esc(who(x.deleted_by).first) + ' · ' : '') + esc(ago(x.deleted_at)) + ' · noch ' + pl(left, 'Tag', 'Tage') + '</span></span></span>' +
+        '<button type="button" class="txt-btn small strong" data-action="trash-restore" data-id="' + esc(x.id) + '">Zurückholen</button>' +
+        (armed ? '<button type="button" class="txt-btn small danger" data-action="trash-purge" data-id="' + esc(x.id) + '">Sicher?</button>'
+          : '<button type="button" class="x-btn" data-action="trash-purge" data-id="' + esc(x.id) + '" aria-label="' + esc('Endgültig löschen: ' + x.title) + '" title="Endgültig löschen">×</button>') + '</div>';
+    }).join('');
+  }
+  function trashSheet() {
+    return wrapForm('trash-form', '', head('Papierkorb', '', 'Fertig') +
+      '<p class="meta-line" style="margin-top:12px">Gelöschte Aufgaben bleiben 30 Tage hier – mit Unteraufgaben, Kommentaren und Zeiten. Jedes Teammitglied kann sie zurückholen.</p>' +
+      '<div class="group" id="trash-list" style="margin-top:12px">' + trashList() + '</div><div id="trash-foot"></div>');
+  }
+  function refreshTrash() {
+    if (!S.sheet || S.sheet.kind !== 'trash') return;
+    var box = $('trash-list'); if (box) box.innerHTML = trashList();
+    var f = $('trash-foot');
+    if (f) f.innerHTML = S.trash && S.trash.length ? '<div class="group" style="margin-top:18px"><button type="button" class="row-btn destructive' + (S.armed === 'trash-empty' ? ' armed' : '') + '" data-action="trash-empty">' +
+      (S.armed === 'trash-empty' ? 'Wirklich alles endgültig löschen?' : 'Papierkorb leeren') + '</button></div>' : '';
+  }
+  function trashRestore(id, btn) {
+    btn.disabled = true;
+    run(S.sb.rpc('restore_trash', { p_id: id })).then(function (taskId) {
+      S.trash = (S.trash || []).filter(function (x) { return x.id !== id; }); refreshTrash();
+      toast('Aufgabe ist wieder da', taskId ? { label: 'Öffnen', fn: function () { if (byId(S.tasks, taskId)) openSheet('task', taskId); } } : null);
+      loadWs();
+    }, function (e) { btn.disabled = false; toast(missingTable(e) ? 'Der Papierkorb ist noch nicht eingerichtet.' : errText(e)); });
+  }
+  function trashPurge(id) {
+    run(S.sb.rpc('purge_trash', { p_ws: S.ws, p_id: id || null })).then(function () {
+      S.trash = id ? (S.trash || []).filter(function (x) { return x.id !== id; }) : [];
+      S.armed = null; refreshTrash(); toast(id ? 'Endgültig gelöscht' : 'Papierkorb geleert');
+    }, function (e) { S.armed = null; refreshTrash(); toast(errText(e)); });
+  }
+
+  /* ================= Mitteilungen ================= */
+  function inboxKey() { return 'effectra.inbox.' + S.ws; }
+  function lastRead() { return Number(ls(inboxKey())) || 0; }
+  function inboxItems() {
+    return S.activity.filter(function (a) {
+      if (!a.actor || a.actor === S.uid) return false;
+      if (a.kind === 'joined' || a.kind === 'restored') return true;
+      var t = a.task_id ? byId(S.tasks, a.task_id) : null;
+      if (!t) return false;
+      if (a.kind === 'created') return t.assignee === S.uid;
+      return (t.assignee === S.uid || t.created_by === S.uid) && /^(comment|done|started|reopened|restored_task)$/.test(a.kind);
+    });
+  }
+  function unreadCount() { var lr = lastRead(); return inboxItems().filter(function (a) { return a.id > lr; }).length; }
+  function inboxText(a) {
+    if (a.kind === 'created') return '<b>' + esc(who(a.actor).name) + '</b> hat <q>' + esc(a.title) + '</q> für dich angelegt';
+    return activityText(a);
+  }
+  function inboxSheet() {
+    var lr = lastRead(), items = inboxItems().slice(0, 50);
+    var list = items.length ? '<div class="group inbox" style="margin-top:12px">' + items.map(function (a) {
+      var exists = a.task_id && byId(S.tasks, a.task_id), cls = a.id > lr ? ' unread' : '';
+      var inner = avatar(a.actor, 's') + '<span class="txt"><span>' + inboxText(a) + '</span><span class="when">' + esc(ago(a.created_at)) + '</span></span>';
+      return exists ? '<button type="button" class="row-btn' + cls + '" data-action="open-task" data-id="' + esc(a.task_id) + '">' + inner + '</button>'
+        : '<div class="row-btn static' + cls + '">' + inner + '</div>';
+    }).join('') + '</div>' : '<div class="empty" style="margin-top:14px"><h2>Keine Mitteilungen</h2><p>Hier erscheint, wenn dir jemand eine Aufgabe gibt oder deine Aufgaben kommentiert und erledigt.</p></div>';
+    return wrapForm('inbox-form', '', head('Mitteilungen', '', 'Fertig') + list);
+  }
+  function markInboxRead() {
+    var top = S.activity.reduce(function (m, a) { return Math.max(m, Number(a.id) || 0); }, 0);
+    if (top > lastRead()) ls(inboxKey(), String(top));
+  }
+
+  /* ================= Updates (Web-App + Windows-Programm) ================= */
+  function cmpVer(a, b) {
+    var x = String(a).split('.').map(Number), y = String(b).split('.').map(Number);
+    for (var i = 0; i < 3; i++) { var d = (x[i] || 0) - (y[i] || 0); if (d) return d > 0 ? 1 : -1; }
+    return 0;
+  }
+  function updReady() {
+    if (S.deskUpd && S.deskUpd.state === 'ready') return { kind: 'desk', version: String(S.deskUpd.version || '') };
+    if (S.webUpd) return { kind: 'web', version: S.webUpd.version, notes: S.webUpd.notes };
+    return null;
+  }
+  function updKey() { var u = updReady(), d = S.deskUpd; return u ? u.kind + u.version : d && d.state === 'downloading' ? 'dl' : 'none'; }
+  function updStateText() {
+    var u = updReady(), d = S.deskUpd;
+    if (u) return 'Version ' + u.version + ' bereit';
+    if (d && d.state === 'downloading') return 'Lädt … ' + (d.percent || 0) + ' %';
+    if (d && d.state === 'checking') return 'Suche …';
+    return 'Aktuell';
+  }
+  var lastWebCheck = 0;
+  function checkWebUpdate() {
+    if (!/^https?:$/.test(location.protocol)) return Promise.resolve(null);
+    lastWebCheck = Date.now();
+    return fetch('version.json?t=' + Date.now(), { cache: 'no-store' }).then(function (r) { return r.ok ? r.json() : null; }).then(function (j) {
+      if (j && typeof j.version === 'string' && /^\d+\.\d+\.\d+$/.test(j.version) && cmpVer(j.version, APP_VERSION) > 0) {
+        var isNew = !S.webUpd || S.webUpd.version !== j.version;
+        S.webUpd = { version: j.version, notes: strList(j.notes, 10, 160) };
+        if (isNew && !(S.deskUpd && S.deskUpd.state === 'ready')) toast('Neue Version ' + j.version + ' verfügbar', { label: 'Ansehen', fn: function () { openSheet('update'); } });
+        refreshUpd();
+      }
+      return S.webUpd;
+    }).catch(function () { return null; });
+  }
+  function onDesk(s) {
+    if (!s || !s.state) return;
+    var was = S.deskUpd && S.deskUpd.state;
+    S.deskUpd = s;
+    if (s.state === 'ready' && was !== 'ready') toast('Update ' + (s.version || '') + ' ist bereit', { label: 'Neu starten', fn: function () { if (DESK) DESK.installUpdate(); } });
+    refreshUpd();
+  }
+  if (DESK) {
+    try {
+      DESK.onUpdate(onDesk);
+      DESK.info().then(function (i) { if (!i) return; S.deskInfo = i; if (i.update) onDesk(i.update); }, function () {});
+    } catch (e) {}
+  }
+  setTimeout(checkWebUpdate, 4000);
+  setInterval(checkWebUpdate, 10 * 60 * 1000);
+  function manualCheck() {
+    var us = $('upd-state'); if (us) us.textContent = 'Suche …';
+    var jobs = [checkWebUpdate()];
+    if (DESK) jobs.push(Promise.resolve(DESK.checkUpdate()).then(function (s) { if (s && s.state !== 'dev') onDesk(s); }, function () {}));
+    Promise.all(jobs).then(function () {
+      refreshUpd();
+      if (updReady()) openSheet('update');
+      else if (S.deskUpd && S.deskUpd.state === 'downloading') toast('Ein Update wird gerade geladen …');
+      else toast('Du hast die neueste Version.');
+    });
+  }
+  function refreshUpd() {
+    var u = updReady(), pill = $('upd-pill'), card = $('side-upd');
+    if (pill) {
+      pill.hidden = !u;
+      var ph = u ? '<i></i><span>' + (u.kind === 'desk' ? 'Neu starten' : 'Update') + '</span>' : '';
+      if (pill.innerHTML !== ph) pill.innerHTML = ph;
+      pill.title = u ? 'Effectra ' + u.version + ' installieren' : '';
+    }
+    if (card) {
+      card.hidden = !u;
+      var ch = u ? '<b>Effectra ' + esc(u.version) + '</b><span>' + (u.kind === 'desk' ? 'Bereit – einmal neu starten' : 'Neue Version verfügbar') + '</span><button type="button" data-action="update">' + (u.kind === 'desk' ? 'Neu starten' : 'Aktualisieren') + '</button>' : '';
+      if (card.innerHTML !== ch) card.innerHTML = ch;
+    }
+    var us = $('upd-state'); if (us) us.textContent = updStateText();
+    if (S.sheet && S.sheet.kind === 'update') {
+      var d = S.deskUpd, pr = $('upd-prog');
+      if (S.sheet.updKey !== updKey()) { var f = $('upd-form'); if (f) f.innerHTML = updateInner(); S.sheet.updKey = updKey(); }
+      else if (pr && d && d.state === 'downloading') pr.style.setProperty('--p', (d.percent || 0) + '%');
+    }
+  }
+  function updHero(title, text) {
+    return '<div class="hero-card"><img src="icons/icon-192.png" alt="" width="72" height="72"><h3>' + esc(title) + '</h3><p>' + esc(text) + '</p></div>';
+  }
+  function notesList(list) { return list && list.length ? '<div class="group"><ul class="notes">' + list.map(function (x) { return '<li>' + esc(x) + '</li>'; }).join('') + '</ul></div>' : ''; }
+  function updateInner() {
+    var u = updReady(), d = S.deskUpd, body;
+    if (u) {
+      body = updHero('Effectra ' + u.version, u.kind === 'desk' ? 'Bereit zur Installation' : 'Neue Version verfügbar') + notesList(u.kind === 'web' ? u.notes : (S.webUpd && S.webUpd.notes)) +
+        '<button type="button" class="btn-p block" data-action="do-update">' + (u.kind === 'desk' ? 'Neu starten und installieren' : 'Jetzt aktualisieren') + '</button>' +
+        '<p class="meta-line">Deine Daten bleiben erhalten. Das dauert nur ein paar Sekunden.</p>';
+    } else if (d && d.state === 'downloading') {
+      body = updHero('Update wird geladen', 'Version ' + (d.version || '') + ' – läuft im Hintergrund, du kannst weiterarbeiten.') + '<div class="upd-prog" id="upd-prog" style="--p:' + (d.percent || 0) + '%"><i></i></div>';
+    } else {
+      body = updHero('Alles aktuell', 'Du hast die neueste Version von Effectra (' + APP_VERSION + ').');
+    }
+    return head('Update', '', u ? 'Später' : 'Fertig') + body;
+  }
+  function doUpdate(btn) {
+    var u = updReady();
+    if (btn) { btn.disabled = true; btn.textContent = 'Wird aktualisiert …'; }
+    if (u && u.kind === 'desk' && DESK) { DESK.installUpdate(); return; }
+    flushDelete();
+    setTimeout(function () { location.reload(); }, 250);
+  }
+  function whatsNewSheet() {
+    return wrapForm('wn-form', '', head('Was ist neu', '', 'Fertig') + updHero('Neu in Effectra ' + APP_VERSION, 'Das hat sich verbessert:') + notesList(CHANGES) +
+      '<button type="button" class="btn-p block" data-action="close-sheet">Los geht’s</button>');
+  }
+  var KEYS = [['Strg + K', 'Schnellsuche'], ['N', 'Neue Aufgabe'], ['1 – 6', 'Bereich wechseln'], ['/', 'Schnell-Eingabe'], ['Strg + B', 'Seitenleiste ein/aus'],
+    ['Rechtsklick', 'Menü für eine Aufgabe'], ['?', 'Diese Übersicht'], ['Esc', 'Schließen']];
+  function keysSheet() {
+    return wrapForm('keys-form', '', head('Tastenkürzel', '', 'Fertig') + '<div class="group keys" style="margin-top:12px">' +
+      KEYS.map(function (k) { return '<div class="row-btn static"><span class="grow">' + esc(k[1]) + '</span><kbd>' + esc(k[0]) + '</kbd></div>'; }).join('') + '</div>' +
+      '<p class="meta-line">Am iPhone: Aufgabe nach rechts wischen = erledigt, nach links = löschen, lange drücken = Menü.</p>');
+  }
+
+  /* ================= Rechtsklick-Menü (PC) / langes Drücken (iPhone) ================= */
+  function ctxItem(action, icon, label, extra, cls) {
+    return '<button type="button" role="menuitem" class="ctx-it' + (cls ? ' ' + cls : '') + '" data-action="' + action + '"' + (extra || '') + '>' + icon + '<span>' + esc(label) + '</span></button>';
+  }
+  function ctxOpen(id, x, y) {
+    var t = byId(S.tasks, id); if (!t) return;
+    var el = $('ctx'), t0 = today(), done = t.status === 'erledigt';
+    var dues = [{ l: 'Heute', d: t0 }, { l: 'Morgen', d: addDays(t0, 1) }, { l: 'Mo', d: nextWeekday(1) }, { l: 'Ohne', d: '' }];
+    el.innerHTML =
+      ctxItem('ctx-open', I.open, 'Öffnen') +
+      ctxItem('ctx-status', done ? I.undo : I.done, done ? 'Wieder öffnen' : 'Erledigt', ' data-s="' + (done ? 'offen' : 'erledigt') + '"') +
+      (!done && t.status !== 'arbeit' ? ctxItem('ctx-status', I.play, 'In Arbeit', ' data-s="arbeit"') : '') +
+      '<div class="ctx-sep"></div><div class="ctx-lbl">Fällig</div><div class="ctx-chips">' + dues.map(function (o) {
+        return '<button type="button" data-action="ctx-due" data-d="' + o.d + '" class="' + ((t.due || '') === o.d ? 'on' : '') + '" title="' + esc(o.d ? dueLabel(o.d) : 'Kein Datum') + '">' + o.l + '</button>';
+      }).join('') + '</div>' +
+      '<div class="ctx-lbl">Priorität</div><div class="ctx-chips">' + PRIO.slice().reverse().map(function (p) {
+        return '<button type="button" data-action="ctx-prio" data-p="' + p.k + '" class="' + ((t.priority || 2) === p.k ? 'on' : '') + '">' + p.l + '</button>';
+      }).join('') + '</div><div class="ctx-sep"></div>' +
+      (t.assignee !== S.uid ? ctxItem('ctx-me', I.user, 'Mir zuweisen') : '') +
+      ctxItem('ctx-dup', I.copy, 'Duplizieren') +
+      '<div class="ctx-sep"></div>' + ctxItem('ctx-del', I.trash, 'Löschen', '', 'danger');
+    el.hidden = false; S.ctx = id;
+    var w = el.offsetWidth, h = el.offsetHeight;
+    var left = Math.max(8, Math.min(x, window.innerWidth - w - 8)), top = Math.max(8, Math.min(y, window.innerHeight - h - 8));
+    el.style.left = left + 'px'; el.style.top = top + 'px';
+    el.style.setProperty('--ox', (x - left) + 'px'); el.style.setProperty('--oy', (y - top) + 'px');
+    el.classList.remove('ctx'); void el.offsetWidth; el.classList.add('ctx');
+  }
+  function ctxClose() { if (!S.ctx) return; S.ctx = null; var el = $('ctx'); el.hidden = true; el.innerHTML = ''; }
+  function patchTask(id, data, msg) {
+    var t = byId(S.tasks, id); if (!t) return;
+    var prev = {}; Object.keys(data).forEach(function (k) { prev[k] = t[k]; });
+    Object.assign(t, data); S.mine[id] = Date.now(); queue();
+    run(S.sb.from('tasks').update(data).eq('id', id).select().single())
+      .then(function (r) { if (r) upsert('tasks', r); if (msg) toast(msg); queue(); }, function (e) { Object.assign(t, prev); toast(errText(e)); queue(); });
+  }
+  function markDone(id, el) {
+    var t = byId(S.tasks, id); if (!t) return;
+    var prev = t.status;
+    if (prev === 'erledigt') { setStatus(id, 'offen'); return; }
+    setStatus(id, 'erledigt', el);
+    if (!t.repeat) toast('Erledigt: ' + t.title, { label: 'Rückgängig', fn: function undo() { if (S.busy[id]) { setTimeout(undo, 200); return; } setStatus(id, prev); } });
+    else toast('Erledigt – die nächste Wiederholung ist angelegt');
+  }
+  function rowEl(id) { return document.querySelector('#view [data-task="' + (window.CSS && CSS.escape ? CSS.escape(id) : id) + '"]'); }
+
+  /* ================= Seitenleiste ================= */
+  var wideMq = window.matchMedia ? window.matchMedia('(min-width: 1100px)') : null;
+  function applySide() {
+    var pref = ls(LS_SIDE), min = pref === 'min' ? true : pref === 'full' ? false : !(wideMq && wideMq.matches);
+    $('app').classList.toggle('min', min);
+  }
+  function toggleSide() { ls(LS_SIDE, $('app').classList.contains('min') ? 'full' : 'min'); applySide(); }
+  if (wideMq && wideMq.addEventListener) wideMq.addEventListener('change', applySide);
+  function setCount(k, n, hot) {
+    var el = document.querySelector('.tab-n[data-count="' + k + '"]'); if (!el) return;
+    var s = n ? String(n > 99 ? '99+' : n) : '';
+    if (el.textContent !== s) el.textContent = s;
+    el.classList.toggle('hot', !!hot);
+    el.classList.toggle('badge-m', k === 'heute' && !!n);
+  }
+  function moveInd() {
+    var nav = document.querySelector('.side .nav'), ind = nav && nav.querySelector('.nav-ind'), cur = nav && nav.querySelector('.tab[aria-current="page"]');
+    if (!ind || !cur) return;
+    var first = !S.indReady; S.indReady = true;
+    if (first) ind.classList.add('instant');
+    ind.style.setProperty('--y', cur.offsetTop + 'px');
+    if (first) { void ind.offsetWidth; ind.classList.remove('instant'); }
+  }
+  function renderChrome() {
+    var ws = currentWs(), me = who(S.uid), t0 = today();
+    $('ws-name').textContent = ws ? ws.name : 'Effectra';
+    $('ws-name-m').textContent = ws ? ws.name : 'Effectra';
+    $('ws-sub').textContent = S.members.length > 1 ? S.members.length + ' Mitglieder' : 'Nur du im Team';
+    var av = avatar(S.uid);
+    if ($('me-btn').innerHTML !== av) $('me-btn').innerHTML = av;
+    var ml = av + '<span class="txt"><b>' + esc(me.name) + '</b><small>' + esc(S.email) + '</small></span>';
+    if ($('side-me').innerHTML !== ml) $('side-me').innerHTML = ml;
+    var tabs = document.querySelectorAll('.tab');
+    for (var i = 0; i < tabs.length; i++) {
+      if (tabs[i].dataset.tab === S.tab) tabs[i].setAttribute('aria-current', 'page'); else tabs[i].removeAttribute('aria-current');
+    }
+    var due = S.tasks.filter(function (t) { return isMine(t) && t.status !== 'erledigt' && t.due && t.due <= t0; });
+    setCount('heute', due.length, due.some(function (t) { return t.due < t0; }));
+    setCount('board', S.tasks.filter(function (t) { return t.status !== 'erledigt'; }).length);
+    setCount('projekte', S.projects.length);
+    moveInd();
+    var projs = S.projects.slice().sort(byName).map(function (p) {
+      var open = S.tasks.filter(function (t) { return t.project_id === p.id && t.status !== 'erledigt'; }).length;
+      var on = S.tab === 'board' && S.filterProject === p.id;
+      return '<button type="button" class="side-proj' + (on ? ' on' : '') + '" data-action="side-proj" data-id="' + esc(p.id) + '" title="' + esc(p.name) + '"><i class="dot" style="--c:var(--c-' + colorOf(p.color) + ')"></i><span>' + esc(p.name) + '</span><small>' + (open || '') + '</small></button>';
+    }).join('');
+    var sp = '<div class="side-h"><span>Projekte</span><button type="button" data-action="new-project" aria-label="Neues Projekt" title="Neues Projekt">+</button></div>' + (projs || '<p class="side-empty">Noch keine Projekte</p>');
+    if ($('side-projects').innerHTML !== sp) $('side-projects').innerHTML = sp;
+    var n = unreadCount(), bn = $('bell-n');
+    bn.hidden = !n; bn.textContent = n > 9 ? '9+' : String(n);
+    $('bell').setAttribute('aria-label', n ? 'Mitteilungen, ' + n + ' neu' : 'Mitteilungen');
+    syncState(); refreshUpd();
   }
 
   /* ================= Tagesziel & Rückmeldung beim Abhaken ================= */
@@ -1222,7 +1597,8 @@
   function bulkDelete() {
     var ids = Object.keys(S.sel); if (!ids.length) return;
     run(S.sb.from('tasks').delete().in('id', ids)).then(function () {
-      S.tasks = S.tasks.filter(function (t) { return !S.sel[t.id]; }); S.sel = {}; toast(pl(ids.length, 'Aufgabe', 'Aufgaben') + ' gelöscht'); queue();
+      S.tasks = S.tasks.filter(function (t) { return !S.sel[t.id]; }); S.sel = {};
+      toast(pl(ids.length, 'Aufgabe', 'Aufgaben') + ' in den Papierkorb gelegt', { label: 'Papierkorb', fn: function () { openSheet('trash'); } }); queue();
     }, function (e) { toast(errText(e)); });
   }
 
@@ -1239,7 +1615,7 @@
     var ws0 = weekStart(t0), weekMs = totalMs(T.filter(function (e) { return ymd(new Date(e.started_at)) >= ws0; }));
     var open = L.filter(function (t) { return t.status !== 'erledigt'; }), over = open.filter(function (t) { return t.due && t.due < t0; }).length;
     var kpis = '<div class="kpis">' +
-      '<div class="kpi"><span class="k-lbl">Erledigt (30 Tage)</span><b>' + done30.length + '</b><span class="k-sub">' + open.length + ' noch offen</span></div>' +
+      '<div class="kpi"><span class="k-lbl">Erledigt (30 Tage)</span><b>' + num(done30.length) + '</b><span class="k-sub">' + open.length + ' noch offen</span></div>' +
       '<div class="kpi"><span class="k-lbl">Pünktlich</span><b>' + (withDue.length ? Math.round(onTime / withDue.length * 100) + ' %' : '–') + '</b><span class="k-sub">' + onTime + ' von ' + withDue.length + ' mit Frist</span></div>' +
       '<div class="kpi"><span class="k-lbl">Ø Durchlaufzeit</span><b>' + (lead.length ? (avgLead < 1 ? '<1' : avgLead.toFixed(1).replace('.', ',')) : '–') + '</b><span class="k-sub">Tage von Anlage bis erledigt</span></div>' +
       '<div class="kpi"><span class="k-lbl">Zeit diese Woche</span><b>' + (weekMs ? fmtDur(weekMs) : '0 Min') + '</b><span class="k-sub">' + (over ? pl(over, 'Aufgabe', 'Aufgaben') + ' überfällig' : 'nichts überfällig') + '</span></div></div>';
@@ -1402,25 +1778,27 @@
   function render() {
     if (S.screen !== 'app') return;
     $('screen').hidden = true; $('screen').innerHTML = '';
+    var firstShow = $('app').hidden;
     $('app').hidden = false; $('fab').hidden = false;
     document.body.classList.remove('plain');
-    var tabs = document.querySelectorAll('.tab');
-    for (var i = 0; i < tabs.length; i++) {
-      if (tabs[i].dataset.tab === S.tab) tabs[i].setAttribute('aria-current', 'page'); else tabs[i].removeAttribute('aria-current');
-    }
-    var ws = currentWs();
-    $('ws-name').textContent = ws ? ws.name : 'Effectra';
-    $('me-btn').innerHTML = avatar(S.uid);
+    if (firstShow) applySide();
+    renderChrome();
     var active = document.activeElement, keepId = active && (active.id === 'f-search' || active.id === 'q-title') ? active.id : '', caret = keepId ? active.selectionStart : 0;
     var qv = $('q-title') ? $('q-title').value : '';
-    var v = $('view');
-    v.classList.toggle('anim', S.animNext); S.animNext = false;
+    var v = $('view'), count = S.animNext || S.countNext;
+    v.classList.toggle('anim', S.animNext); S.animNext = false; S.countNext = false;
     v.innerHTML = S.tab === 'board' ? viewBoard() : S.tab === 'kalender' ? viewKalender() : S.tab === 'projekte' ? viewProjekte() : S.tab === 'team' ? viewTeam() : S.tab === 'berichte' ? viewBerichte() : viewHeute();
     if ($('q-title')) { $('q-title').value = qv; quickHint(); }
     if (keepId) { var f = $(keepId); if (f) { f.focus(); try { f.setSelectionRange(caret, caret); } catch (e) {} } }
+    if (count) countUp();
+    if (S.ctx && !byId(S.tasks, S.ctx)) ctxClose();
     focusTick(); timerTick();
     if (!S.checked) { S.checked = true; setTimeout(checkGoal, 800); }
     if (!S.reminded) { S.reminded = true; setTimeout(dailyReminder, 1500); }
+    if (!S.wnChecked) {
+      S.wnChecked = true;
+      if (ls(LS_SEEN) !== APP_VERSION) setTimeout(function () { if (S.screen === 'app' && !S.sheet && !S.pal) { ls(LS_SEEN, APP_VERSION); openSheet('whatsnew'); } }, 900);
+    }
   }
   function queue() {
     if (S.pending) return;
@@ -1535,10 +1913,16 @@
       '<div class="sec-h"><span>Sicherung</span></div><div class="group">' +
       '<button type="button" class="row-btn accent" data-action="backup-now"><span class="grow">' + I.cloud + ' Jetzt in Supabase sichern</span></button>' +
       '<button type="button" class="row-btn accent" data-action="export-json"><span class="grow">Sicherung als Datei herunterladen</span></button>' +
-      '<button type="button" class="row-btn accent" data-action="export-csv"><span class="grow">Aufgaben als Excel/CSV exportieren</span></button></div>' +
+      '<button type="button" class="row-btn accent" data-action="export-csv"><span class="grow">Aufgaben als Excel/CSV exportieren</span></button>' +
+      '<button type="button" class="row-btn" data-action="trash"><span class="grow">Papierkorb</span><i class="chev"></i></button></div>' +
+      '<p class="meta-line">Automatisch: jede Nacht (30 Tage lang) und jeden Sonntag (ein halbes Jahr lang). Gelöschte Aufgaben bleiben 30 Tage im Papierkorb.</p>' +
       '<div class="sec-h"><span>Letzte Cloud-Sicherungen</span></div><div class="group" id="backup-list">' + backupList() + '</div>' +
-      '<div class="sec-h"><span>Tastenkürzel</span></div><div class="group keys">' +
-      [['Strg + K', 'Schnellsuche'], ['N', 'Neue Aufgabe'], ['1 – 6', 'Bereich wechseln'], ['/', 'Schnell-Eingabe'], ['Esc', 'Schließen']].map(function (k) { return '<div class="row-btn static"><span class="grow">' + k[1] + '</span><kbd>' + k[0] + '</kbd></div>'; }).join('') + '</div>' +
+      '<div class="sec-h"><span>Über Effectra</span></div><div class="group">' +
+      '<div class="about"><img src="icons/icon-192.png" alt="" width="44" height="44"><span class="txt"><b>Effectra ' + APP_VERSION + '</b><span>' +
+      (DESK ? 'Windows-App' + (S.deskInfo && S.deskInfo.version ? ' ' + esc(S.deskInfo.version) : '') + ' · aktualisiert sich selbst' : 'Web-App · aktualisiert sich selbst') + '</span></span></div>' +
+      '<button type="button" class="row-btn accent" data-action="check-update"><span class="grow">Nach Updates suchen</span><span class="muted" id="upd-state">' + esc(updStateText()) + '</span></button>' +
+      '<button type="button" class="row-btn" data-action="whatsnew"><span class="grow">Was ist neu</span><i class="chev"></i></button>' +
+      '<button type="button" class="row-btn" data-action="keys"><span class="grow">Tastenkürzel</span><i class="chev"></i></button></div>' +
       (owner ? '<div class="sec-h"><span>Teamname</span></div><div class="group"><div class="f row"><label class="vh" for="s-ws">Teamname</label><input id="s-ws" type="text" maxlength="60" value="' + esc(ws ? ws.name : '') + '"><button type="button" class="txt-btn strong" data-action="save-ws">Sichern</button></div></div>' : '') +
       '<div class="sec-h"><span>Teams</span></div><div class="group">' + switcher + '<button type="button" class="row-btn accent" data-action="onboard"><span class="grow">Team gründen oder beitreten</span><i class="chev"></i></button></div>' +
       '<div class="form-error" id="form-error" role="alert"></div>' +
@@ -1548,17 +1932,22 @@
   }
 
   function openSheet(kind, id) {
-    var html = kind === 'task' ? taskSheet(id) : kind === 'project' ? projectSheet(id) : settingsSheet();
+    if (S.screen !== 'app') return;
+    ctxClose(); closePalette();
+    var html = kind === 'task' ? taskSheet(id) : kind === 'project' ? projectSheet(id) : kind === 'inbox' ? inboxSheet() : kind === 'trash' ? trashSheet()
+      : kind === 'update' ? wrapForm('upd-form', '', updateInner()) : kind === 'whatsnew' ? whatsNewSheet() : kind === 'keys' ? keysSheet() : settingsSheet();
     if (!html) return;
     clearTimeout(S.closeTimer);
-    S.armed = null; S.aiSubs = []; S.sheet = { kind: kind, id: id || '' }; S.last = document.activeElement; S.draftSubs = [];
+    S.armed = null; S.aiSubs = []; S.sheet = { kind: kind, id: id || '', updKey: kind === 'update' ? updKey() : '' }; S.last = document.activeElement; S.draftSubs = [];
     var el = $('sheet');
     el.classList.remove('closing');
     el.innerHTML = html; el.hidden = false;
     document.documentElement.classList.add('lock');
     if (kind === 'task') refreshSheet();
     if (kind === 'settings') loadBackups();
-    if (!id && kind !== 'settings') { var first = el.querySelector('input[type="text"]'); if (first) first.focus(); }
+    if (kind === 'trash') { refreshTrash(); loadTrash(); }
+    if (kind === 'inbox') { markInboxRead(); renderChrome(); }
+    if (!id && (kind === 'task' || kind === 'project')) { var first = el.querySelector('input[type="text"]'); if (first) first.focus(); }
   }
   function closeSheet() {
     if (!S.sheet) return;
@@ -1623,6 +2012,7 @@
     btn.querySelector('i').innerHTML = next === 'erledigt' ? I.check : '';
     var r = btn.closest('.row'); if (r) r.classList.toggle('is-done', next === 'erledigt');
     if (next === 'erledigt') {
+      btn.classList.remove('pop'); void btn.offsetWidth; btn.classList.add('pop');
       celebrateAt(btn); rewardDone();
       if (!t.repeat) toast('Erledigt: ' + t.title, { label: 'Rückgängig', fn: function undo() { if (S.busy[id]) { setTimeout(undo, 200); return; } setStatus(id, prev); } });
       else toast('Erledigt – die nächste Wiederholung ist angelegt');
@@ -1666,6 +2056,8 @@
 
   /* ================= Ereignisse ================= */
   document.addEventListener('click', function (e) {
+    if (S.swallow && Date.now() - S.swallow < 350) { S.swallow = 0; e.preventDefault(); e.stopPropagation(); return; }
+    if (S.ctx && !e.target.closest('#ctx')) { ctxClose(); e.preventDefault(); return; }
     var authLink = e.target.closest('[data-auth]');
     if (authLink) { S.authMode = authLink.dataset.auth; authScreen(); return; }
     var tab = e.target.closest('[data-tab]');
@@ -1790,7 +2182,32 @@
         break;
       case 'logout': closeSheet(); unsubscribe(); S.sb.auth.signOut(); break;
       case 'retry': start(); break;
-      case 'theme': ls(LS_THEME, el.dataset.seg === 'auto' ? null : el.dataset.seg); applyTheme(); break;
+      case 'theme': switchTheme(el.dataset.seg); break;
+      case 'side-toggle': toggleSide(); break;
+      case 'side-proj':
+        S.filterProject = S.tab === 'board' && S.filterProject === id ? '' : id; S.search = '';
+        if (S.tab === 'board') render(); else goTab('board');
+        break;
+      case 'inbox': openSheet('inbox'); break;
+      case 'trash': openSheet('trash'); break;
+      case 'trash-restore': trashRestore(id, el); break;
+      case 'trash-purge': if (S.armed !== 'purge:' + id) { S.armed = 'purge:' + id; refreshTrash(); break; } trashPurge(id); break;
+      case 'trash-empty': if (S.armed !== 'trash-empty') { S.armed = 'trash-empty'; refreshTrash(); break; } trashPurge(null); break;
+      case 'update': openSheet('update'); break;
+      case 'do-update': doUpdate(el); break;
+      case 'check-update': manualCheck(); break;
+      case 'whatsnew': openSheet('whatsnew'); break;
+      case 'keys': openSheet('keys'); break;
+      case 'ctx-open': var co = S.ctx; ctxClose(); openSheet('task', co); break;
+      case 'ctx-status':
+        var cs = S.ctx, ns = el.dataset.s, cr = rowEl(cs); ctxClose();
+        if (ns === 'erledigt') markDone(cs, cr && cr.querySelector('.state')); else setStatus(cs, ns);
+        break;
+      case 'ctx-due': var cd = S.ctx, dd = el.dataset.d || null; ctxClose(); patchTask(cd, { due: dd }, dd ? 'Fällig: ' + dueLabel(dd) : 'Datum entfernt'); break;
+      case 'ctx-prio': var cp = S.ctx, pv = Number(el.dataset.p) || 2; ctxClose(); patchTask(cp, { priority: pv }, 'Priorität: ' + PRIO[pv - 1].l); break;
+      case 'ctx-me': var cm2 = S.ctx; ctxClose(); patchTask(cm2, { assignee: S.uid }, 'Dir zugewiesen'); break;
+      case 'ctx-dup': var cdup = S.ctx; ctxClose(); duplicateTask(cdup); break;
+      case 'ctx-del': var cdel = S.ctx; ctxClose(); deleteTask(cdel); break;
       case 'toggle-notify': toggleNotify(); break;
       case 'backup-now': backupNow(el); break;
       case 'backup-dl': backupDownload(id); break;
@@ -1834,7 +2251,19 @@
     else if (id === 'p-due') { var c2 = $('clear-pdue'); if (c2) c2.hidden = !e.target.value; }
   });
   document.addEventListener('keydown', function (e) {
+    if (S.ctx) {
+      if (e.key === 'Escape') { e.preventDefault(); ctxClose(); return; }
+      if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+        e.preventDefault();
+        var bs = Array.prototype.slice.call($('ctx').querySelectorAll('button')), at = bs.indexOf(document.activeElement);
+        var nx = at < 0 ? (e.key === 'ArrowDown' ? 0 : bs.length - 1) : (at + (e.key === 'ArrowDown' ? 1 : bs.length - 1)) % bs.length;
+        if (bs[nx]) bs[nx].focus();
+        return;
+      }
+      if (e.key === 'Tab') { ctxClose(); }
+    }
     if ((e.key === 'k' || e.key === 'K') && (e.ctrlKey || e.metaKey)) { e.preventDefault(); S.pal ? closePalette() : openPalette(); return; }
+    if ((e.key === 'b' || e.key === 'B') && (e.ctrlKey || e.metaKey) && !e.altKey && S.screen === 'app') { e.preventDefault(); toggleSide(); return; }
     if (S.pal) {
       if (e.key === 'Escape') { closePalette(); return; }
       if (e.key === 'ArrowDown' || e.key === 'ArrowUp') { e.preventDefault(); var n = S.pal.items.length; if (n) { S.pal.i = (S.pal.i + (e.key === 'ArrowDown' ? 1 : n - 1)) % n; palRender(); } return; }
@@ -1846,6 +2275,7 @@
     var typing = /^(INPUT|TEXTAREA|SELECT)$/.test(e.target.tagName) || e.target.isContentEditable;
     if (!typing && !S.sheet && S.screen === 'app' && !e.ctrlKey && !e.metaKey && !e.altKey) {
       if (e.key === 'n' || e.key === 'N') { e.preventDefault(); openSheet('task'); return; }
+      if (e.key === '?') { e.preventDefault(); openSheet('keys'); return; }
       if (/^[1-6]$/.test(e.key)) { goTab(TABS[Number(e.key) - 1]); return; }
       if (e.key === '/') { var qi = $('q-title') || $('f-search'); if (qi) { e.preventDefault(); qi.focus(); } return; }
     }
@@ -1888,13 +2318,108 @@
     if (t.dataset.col) setStatus(id, t.dataset.col, t); else if (t.dataset.day) moveDue(id, t.dataset.day);
   });
   document.addEventListener('visibilitychange', function () {
-    if (document.visibilityState === 'visible' && S.screen === 'app' && Date.now() - S.lastLoad > 20000) loadWs();
+    if (document.visibilityState !== 'visible') return;
+    if (S.screen === 'app' && Date.now() - S.lastLoad > 20000) loadWs();
+    if (Date.now() - lastWebCheck > 60000) checkWebUpdate();
   });
-  window.addEventListener('online', function () { if (S.screen === 'app') loadWs(); });
+  window.addEventListener('online', function () { if (S.screen === 'app') loadWs(); checkWebUpdate(); });
+
+  // Kopfzeile bekommt beim Scrollen eine feine Linie; offenes Menü schließt
+  window.addEventListener('scroll', function () {
+    var top = document.querySelector('.top'); if (top) top.classList.toggle('scrolled', window.scrollY > 4);
+    if (S.ctx) ctxClose();
+  }, { passive: true });
+  window.addEventListener('resize', function () { if (S.ctx) ctxClose(); moveInd(); });
+
+  // Rechtsklick auf eine Aufgabe
+  document.addEventListener('contextmenu', function (e) {
+    var r = e.target.closest && e.target.closest('#view [data-task]');
+    if (!r || S.screen !== 'app' || S.sheet || e.target.closest('input, textarea, select')) return;
+    e.preventDefault();
+    var x = e.clientX, y = e.clientY;
+    if (!x && !y) { var rc = r.getBoundingClientRect(); x = rc.left + 24; y = rc.top + rc.height / 2; } // per Tastatur geöffnet
+    ctxOpen(r.dataset.task, x, y);
+  });
+
+  // iPhone: lange drücken = Menü, wischen = erledigt (rechts) / löschen (links)
+  var LP = null, SW = null, SW_MIN = 96;
+  function lpCancel() { if (LP) { clearTimeout(LP.timer); LP = null; } }
+  document.addEventListener('touchstart', function (e) {
+    lpCancel();
+    var r = e.target.closest && e.target.closest('#view [data-task]');
+    if (!r || S.sheet || e.touches.length !== 1 || e.target.closest('input, textarea, select')) return;
+    var t = e.touches[0];
+    LP = { x: t.clientX, y: t.clientY, id: r.dataset.task, fired: false };
+    LP.timer = setTimeout(function () {
+      if (!LP || SW && SW.on) return;
+      LP.fired = true;
+      if (navigator.vibrate) { try { navigator.vibrate(8); } catch (er) {} }
+      ctxOpen(LP.id, LP.x, LP.y);
+    }, 480);
+  }, { passive: true });
+  document.addEventListener('touchmove', function (e) {
+    if (!LP || LP.fired) return;
+    var t = e.touches[0];
+    if (Math.abs(t.clientX - LP.x) > 10 || Math.abs(t.clientY - LP.y) > 10) lpCancel();
+  }, { passive: true });
+  document.addEventListener('touchend', function (e) {
+    if (LP && LP.fired) { e.preventDefault(); S.swallow = Date.now(); }
+    lpCancel();
+  }, { passive: false });
+  document.addEventListener('pointerdown', function (e) {
+    if (e.pointerType !== 'touch' || S.sheet || S.ctx) return;
+    var r = e.target.closest && e.target.closest('#view .row.task');
+    if (!r || !r.parentElement || !r.parentElement.classList.contains('group')) return;
+    SW = { row: r, x: e.clientX, y: e.clientY, dx: 0, on: false, id: r.dataset.task, pid: e.pointerId };
+  }, { passive: true });
+  document.addEventListener('pointermove', function (e) {
+    if (!SW || e.pointerId !== SW.pid) return;
+    var dx = e.clientX - SW.x, dy = e.clientY - SW.y;
+    if (!SW.on) {
+      if (Math.abs(dy) > 10 && Math.abs(dy) >= Math.abs(dx)) { SW = null; return; }
+      if (Math.abs(dx) < 14) return;
+      SW.on = true; lpCancel();
+      var bg = document.createElement('div');
+      bg.className = 'swipe-bg'; bg.innerHTML = '<span></span>';
+      bg.style.top = SW.row.offsetTop + 'px'; bg.style.height = SW.row.offsetHeight + 'px';
+      SW.row.parentElement.insertBefore(bg, SW.row);
+      SW.bg = bg; SW.row.classList.add('swiping');
+      var t = byId(S.tasks, SW.id); SW.done = t && t.status === 'erledigt';
+    }
+    S.hold = Date.now() + 500; // während des Wischens nicht neu zeichnen
+    var w = SW.row.offsetWidth, d = dx;
+    if (Math.abs(d) > SW_MIN) d = (d > 0 ? 1 : -1) * (SW_MIN + (Math.abs(d) - SW_MIN) * 0.55); // weicher Widerstand
+    d = Math.max(-w * 0.85, Math.min(w * 0.85, d));
+    SW.dx = d;
+    SW.row.style.transform = 'translateX(' + d + 'px)';
+    var go = Math.abs(d) >= SW_MIN;
+    SW.bg.className = 'swipe-bg ' + (d > 0 ? 'done' : 'del') + (go ? ' go' : ' weak');
+    SW.bg.firstChild.textContent = d > 0 ? (SW.done ? 'Wieder öffnen' : 'Erledigt') : 'Löschen';
+    if (go !== SW.go) { SW.go = go; if (go && navigator.vibrate) { try { navigator.vibrate(6); } catch (er) {} } }
+  }, { passive: true });
+  function swipeEnd(cancel) {
+    var s = SW; SW = null;
+    if (!s || !s.on) return;
+    S.swallow = Date.now();
+    var go = !cancel && Math.abs(s.dx) >= SW_MIN, row = s.row;
+    row.classList.add('settle');
+    var clean = function () { row.classList.remove('settle', 'swiping'); row.style.transform = ''; if (s.bg && s.bg.parentNode) s.bg.remove(); };
+    if (go && s.dx < 0) {
+      row.style.transform = 'translateX(-105%)';
+      setTimeout(function () { clean(); deleteTask(s.id); }, 230);
+    } else {
+      row.style.transform = 'translateX(0)';
+      setTimeout(clean, 360);
+      if (go) setTimeout(function () { markDone(s.id, row.querySelector('.state')); }, 120);
+    }
+  }
+  document.addEventListener('pointerup', function (e) { if (SW && e.pointerId === SW.pid) swipeEnd(false); });
+  document.addEventListener('pointercancel', function (e) { if (SW && e.pointerId === SW.pid) swipeEnd(true); });
 
   /* ================= Start ================= */
   function boot() {
     var cfg = window.EFFECTRA_CONFIG || {};
+    Array.prototype.forEach.call(document.querySelectorAll('.tab'), function (t) { var l = t.querySelector('.tab-l'); if (l) t.title = l.textContent; });
     if (!window.supabase || !window.supabase.createClient) {
       showScreen('<div class="setup"><h1 class="large">Keine Verbindung</h1><p class="subtitle">Effectra konnte nicht geladen werden. Prüfe deine Internetverbindung und lade die Seite neu.</p></div>');
       return;

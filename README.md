@@ -6,12 +6,16 @@ Projektmanagement für kleine Teams: Aufgaben, Board, Projekte, Unteraufgaben, K
 
 Die neueste Version gibt es unter **[Releases](../../releases/latest)**:
 
-- **Windows:** `Effectra-Setup-x.y.z.exe` herunterladen und starten.
+- **Windows:** `Effectra-Setup-x.y.z.exe` einmal herunterladen und starten.
   Bei einer Warnung auf *Weitere Informationen → Trotzdem ausführen* klicken.
+  Danach nie wieder: Neue Versionen erscheinen direkt in der App (oben „Update“ → ein Klick).
 - **iPhone:** Die Web-App in Safari öffnen → *Teilen* → *Zum Home-Bildschirm*.
 
 ## Funktionen
 
+- Updates direkt in der App (Web, iPhone und Windows) mit „Was ist neu“
+- Seitenleiste wie bei Mac-Apps, volle Breite, randloses Windows-Fenster
+- Papierkorb (30 Tage), Mitteilungen mit Glocke, Rechtsklick-Menü, Wischgesten am iPhone
 - Heute-Übersicht mit Kennzahlen, Serie, Wochenvergleich, Auslastung und Deadlines
 - Board mit Ziehen & Ablegen, Kalender mit Monatsansicht
 - Schnell-Eingabe: „Kunde anrufen morgen #Projekt @Person !“
@@ -23,12 +27,12 @@ Die neueste Version gibt es unter **[Releases](../../releases/latest)**:
 - KI-Assistent (Google Gemini): Unteraufgaben vorschlagen, Freitext in Aufgabe umwandeln, Tag planen, Projekt- und Wochenzusammenfassung
 - Fokus-Timer, Benachrichtigungen, hell/dunkel
 - Anmeldung per E-Mail und Passwort
-- Tägliche Cloud-Sicherung in Supabase, Export als JSON und CSV
+- Cloud-Sicherung in Supabase: täglich (30 Tage) und wöchentlich (ein halbes Jahr), Export als JSON und CSV
 
 ## Aufbau
 
 | Ordner | Inhalt |
 |---|---|
 | `effectra/` | Web-App (HTML, CSS, JavaScript), kein Build nötig |
-| `desktop/` | Desktop-App für Windows (Electron, aktualisiert sich automatisch) |
+| `desktop/` | Windows-Fenster (Electron): lädt die Web-App live, aktualisiert sich selbst |
 | `.github/workflows/` | Baut die Desktop-Apps automatisch bei jedem neuen Versions-Tag |
