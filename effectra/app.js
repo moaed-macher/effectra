@@ -4,15 +4,10 @@
 
   /* ================= Konstanten ================= */
   // Bei jeder Veröffentlichung erhöhen – gleich wie in version.json und den ?v= in index.html
-  var APP_VERSION = '3.0.0';
+  var APP_VERSION = '3.0.1';
   var CHANGES = [
-    'Viel schneller: sofortiger Bereichswechsel, Blitzstart, neuer Ladebalken',
-    'Frag Effectra: KI-Chat, der eure Aufgaben kennt und für dich ändert (du bestätigst)',
-    'Diktieren: Aufgaben einfach einsprechen – am iPhone und am PC',
-    'Text → Aufgaben, Projekt mit KI planen, Morgen-Briefing und Wochenrückblick',
-    'Etiketten, Erinnerungen mit Uhrzeit, Anhänge und Fotos, @Erwähnungen',
-    'Vorlagen, Projekt-Zeitleiste, Projekt-Notizen, Archiv, Kalender-Wochenansicht',
-    'Import aus Excel/CSV · Windows: Strg+Leertaste, Taskleiste, Autostart'
+    'Fehler behoben: Die App blieb beim zweiten Öffnen bei „Keine Verbindung“ hängen.',
+    'Effectra lädt jetzt keine Dateien mehr von fremden Servern – schneller und sicherer.'
   ];
   var DESK = window.effectraDesktop || null; // nur in der Windows-App vorhanden
   if (DESK) document.documentElement.classList.add('desk');

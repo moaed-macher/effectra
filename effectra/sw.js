@@ -1,8 +1,9 @@
 // Effectra – Blitzstart: hält die App-Dateien auf dem Gerät.
 // index.html kommt immer zuerst aus dem Netz (damit Updates sofort da sind), nur offline aus dem Speicher.
-// Dateien mit Versionsnummer (?v=…) und die Supabase-Bibliothek kommen direkt aus dem Speicher.
-// Daten (Supabase) und version.json laufen nie über den Speicher.
-const CACHE = 'effectra-3.0.0';
+// Dateien mit Versionsnummer (?v=…, auch vendor/supabase.js) kommen direkt aus dem Speicher.
+// Fremde Adressen (Supabase-Daten) und version.json laufen nie über den Speicher –
+// der Service Worker darf wegen der CSP (connect-src) keine fremden Server abrufen.
+const CACHE = 'effectra-3.0.1';
 
 self.addEventListener('install', (e) => { self.skipWaiting(); });
 self.addEventListener('activate', (e) => {
@@ -33,8 +34,5 @@ self.addEventListener('fetch', (e) => {
     if (url.pathname.endsWith('/version.json') || url.pathname.endsWith('/sw.js')) return;
     if (req.mode === 'navigate' || url.pathname === '/' || url.pathname.endsWith('/index.html')) { e.respondWith(networkFirst(req)); return; }
     if (url.search.includes('v=') || url.pathname.includes('/icons/') || url.pathname.endsWith('.webmanifest')) { e.respondWith(fromCache(req)); return; }
-    return;
   }
-  // Supabase-Bibliothek vom CDN (feste Version in der Adresse)
-  if (url.hostname === 'cdn.jsdelivr.net' && /@\d+\.\d+\.\d+/.test(url.pathname)) e.respondWith(fromCache(req));
 });
