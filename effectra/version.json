@@ -1,7 +1,10 @@
 {
-  "version": "3.3.1",
+  "version": "4.0.0",
   "date": "2026-10-30",
   "notes": [
-    "Spotify: Es läuft jetzt genau der Song, den du anklickst – auch wenn in Spotify „Zufällig“ an ist. Er erscheint sofort oben."
+    "10 Farbthemen: Einstellungen → Farbe.",
+    "E-Mail-Assistent: Die KI liest Mails (Gmail, eingefügt oder als .eml), fasst sie zusammen und macht Aufgaben mit Fristen.",
+    "Notizen: privat oder fürs Team, anheften, und mit einem Klick Aufgaben daraus machen.",
+    "Tagesabschluss, Prioritäten-Matrix, „Heute“ anpassen, Fokus-Statistik und „Alles Überfällige auf heute“."
   ]
 }

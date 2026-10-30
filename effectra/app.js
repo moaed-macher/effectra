@@ -4,9 +4,12 @@
 
   /* ================= Konstanten ================= */
   // Bei jeder Veröffentlichung erhöhen – gleich wie in version.json und den ?v= in index.html
-  var APP_VERSION = '3.3.1';
+  var APP_VERSION = '4.0.0';
   var CHANGES = [
-    'Spotify: Es läuft jetzt genau der Song, den du anklickst – auch wenn in Spotify „Zufällig“ an ist. Er erscheint sofort oben.'
+    '10 Farbthemen: Einstellungen → Farbe.',
+    'E-Mail-Assistent: Die KI liest Mails (Gmail, eingefügt oder als .eml), fasst sie zusammen und macht Aufgaben mit Fristen.',
+    'Notizen: privat oder fürs Team, anheften, und mit einem Klick Aufgaben daraus machen.',
+    'Tagesabschluss, Prioritäten-Matrix, „Heute“ anpassen, Fokus-Statistik und „Alles Überfällige auf heute“.'
   ];
   var DESK = window.effectraDesktop || null; // nur in der Windows-App vorhanden
   if (DESK) document.documentElement.classList.add('desk');
@@ -21,8 +24,10 @@
   var LS_WS = 'effectra.ws';
   var LS_THEME = 'effectra.theme';
   var LS_FOCUS = 'effectra.focus';
-  var TABS = ['heute', 'board', 'kalender', 'projekte', 'berichte', 'team'];
+  var TABS = ['heute', 'board', 'kalender', 'projekte', 'notizen', 'berichte', 'team'];
   var THEMES = [{ k: 'auto', l: 'Automatisch' }, { k: 'light', l: 'Hell' }, { k: 'dark', l: 'Dunkel' }];
+  var ACCENTS = [{ k: 'blue', l: 'Blau', a1: '#007AFF', a2: '#5E5CE6' }, { k: 'indigo', l: 'Indigo', a1: '#5856D6', a2: '#AF52DE' }, { k: 'purple', l: 'Lila', a1: '#9F44D3', a2: '#E5398F' }, { k: 'pink', l: 'Pink', a1: '#E8265E', a2: '#FF7A45' }, { k: 'red', l: 'Rot', a1: '#D9342B', a2: '#FF6A3D' }, { k: 'orange', l: 'Orange', a1: '#E06A00', a2: '#F2A100' }, { k: 'gold', l: 'Gold', a1: '#B07A00', a2: '#D99A00' }, { k: 'green', l: 'Grün', a1: '#1F8A3B', a2: '#14A38B' }, { k: 'teal', l: 'Türkis', a1: '#0A8FA3', a2: '#2E9E5B' }, { k: 'graphite', l: 'Graphit', a1: '#3A3A3C', a2: '#6E6E73' }];
+  var LS_ACCENT = 'effectra.accent';
   var WD = { mo: 1, montag: 1, di: 2, dienstag: 2, mi: 3, mittwoch: 3, do: 4, donnerstag: 4, fr: 5, freitag: 5, sa: 6, samstag: 6, sonntag: 0 };
 
   var I = {
@@ -62,7 +67,7 @@
     sheet: null, armed: null, draftSubs: [], channel: null, live: true, lastLoad: 0, loadSeq: 0,
     hold: 0, pending: false, animNext: true, toastTimer: 0, closeTimer: 0, busy: {}, onbBack: false,
     calMonth: '', calDay: '', calMine: false, preset: null, dragId: null, focusEnd: 0,
-    time_entries: [], templates: [], attachments: [], sel: {}, boardView: 'cols', filterDue: '', filterPrio: '', sortKey: 'due', sortDir: 1, repScope: 'team', backups: null, backupErr: '', mine: {}, pal: null,
+    time_entries: [], templates: [], attachments: [], notes: [], sel: {}, boardView: 'cols', filterDue: '', filterPrio: '', sortKey: 'due', sortDir: 1, repScope: 'team', backups: null, backupErr: '', mine: {}, pal: null,
     trash: null, trashErr: '', ctx: null, webUpd: null, deskUpd: null, deskInfo: null, countNext: false, swallow: 0
   };
   var LS_NOTIFY = 'effectra.notify';
@@ -118,9 +123,16 @@
   var darkMq = window.matchMedia ? window.matchMedia('(prefers-color-scheme: dark)') : null;
   function isDark() { var t = theme(); return t === 'dark' || (t === 'auto' && !!darkMq && darkMq.matches); }
   function calmMotion() { try { return window.matchMedia('(prefers-reduced-motion: reduce)').matches; } catch (e) { return false; } }
+  function accent() { var a = ls(LS_ACCENT); return ACCENTS.some(function (x) { return x.k === a; }) ? a : 'blue'; }
+  function accentPicker() {
+    return '<div class="group accents" role="radiogroup" aria-label="Farbe">' + ACCENTS.map(function (x) {
+      return '<button type="button" class="acc" role="radio" aria-checked="' + (accent() === x.k) + '" data-action="accent" data-k="' + x.k + '" style="--a1:' + x.a1 + ';--a2:' + x.a2 + '"><i></i>' + esc(x.l) + '</button>';
+    }).join('') + '</div>';
+  }
   function applyTheme() {
     var t = theme(), root = document.documentElement;
     if (t === 'auto') root.removeAttribute('data-theme'); else root.setAttribute('data-theme', t);
+    var a = accent(); if (a === 'blue') root.removeAttribute('data-accent'); else root.setAttribute('data-accent', a);
     if (DESK) { try { DESK.setTheme(isDark()); } catch (e) {} } // Fensterknöpfe passend färben
   }
   applyTheme();
@@ -266,7 +278,7 @@
     if (!left) {
       S.focusEnd = 0; ls(LS_FOCUS, null);
       if (pill) pill.hidden = true;
-      deskQuiet(false); focusView(); alarmStart();
+      focusLog(); deskQuiet(false); focusView(); alarmStart();
       setTimeout(function () { notify('Fokuszeit vorbei', 'Gönn dir eine kurze Pause!'); }, 1500);
       celebrate(window.innerWidth / 2, window.innerHeight / 3);
       queue();
@@ -514,10 +526,11 @@
       run(S.sb.from('activity').select('*').eq('workspace_id', id).order('id', { ascending: false }).limit(100)),
       q('time_entries', '*').catch(function () { return []; }),
       q('templates', '*').catch(function () { return []; }),
-      q('attachments', '*').catch(function () { return []; })
+      q('attachments', '*').catch(function () { return []; }),
+      q('notes', '*').catch(function () { return []; })
     ]).then(function (r) {
       if (seq !== S.loadSeq || id !== S.ws) return;
-      S.members = r[0] || []; S.projects = r[1] || []; S.tasks = r[2] || []; S.subtasks = r[3] || []; S.comments = r[4] || []; S.activity = r[5] || []; S.time_entries = r[6] || []; S.templates = r[7] || []; S.attachments = r[8] || [];
+      S.members = r[0] || []; S.projects = r[1] || []; S.tasks = r[2] || []; S.subtasks = r[3] || []; S.comments = r[4] || []; S.activity = r[5] || []; S.time_entries = r[6] || []; S.templates = r[7] || []; S.attachments = r[8] || []; S.notes = r[9] || [];
       S.lastLoad = Date.now();
       if (!S.members.some(function (m) { return m.user_id === S.uid; })) { ls(LS_WS, null); S.ws = null; return start(); }
       // Beim allerersten Mal gilt alles Bisherige als gelesen
@@ -535,13 +548,13 @@
   }
 
   /* ================= Echtzeit ================= */
-  var LISTS = { tasks: 'tasks', projects: 'projects', subtasks: 'subtasks', comments: 'comments', activity: 'activity', time_entries: 'time_entries', templates: 'templates', attachments: 'attachments' };
+  var LISTS = { tasks: 'tasks', projects: 'projects', subtasks: 'subtasks', comments: 'comments', activity: 'activity', time_entries: 'time_entries', templates: 'templates', attachments: 'attachments', notes: 'notes' };
   function unsubscribe() { if (S.channel) { try { S.sb.removeChannel(S.channel); } catch (e) {} S.channel = null; } }
   function subscribe() {
     unsubscribe();
     var id = S.ws;
     var ch = S.sb.channel('ws-' + id);
-    ['tasks', 'projects', 'subtasks', 'comments', 'workspace_members', 'activity', 'time_entries', 'templates', 'attachments'].forEach(function (t) {
+    ['tasks', 'projects', 'subtasks', 'comments', 'workspace_members', 'activity', 'time_entries', 'templates', 'attachments', 'notes'].forEach(function (t) {
       ch.on('postgres_changes', { event: 'INSERT', schema: 'public', table: t, filter: 'workspace_id=eq.' + id }, function (p) { onChange(t, p); });
       ch.on('postgres_changes', { event: 'UPDATE', schema: 'public', table: t, filter: 'workspace_id=eq.' + id }, function (p) { onChange(t, p); });
       ch.on('postgres_changes', { event: 'DELETE', schema: 'public', table: t }, function (p) { onChange(t, p); });
@@ -776,7 +789,7 @@
     var next = active.filter(function (t) { return !shown[t.id] && (t.priority === 3 || (t.due && t.due <= addDays(t0, 7))); }).sort(sortActive).slice(0, 5);
 
     var lists = '';
-    if (overdue.length) lists += '<section><div class="sec-h red"><span>Überfällig</span><span>' + overdue.length + '</span></div>' + group(overdue) + '</section>';
+    if (overdue.length) lists += '<section><div class="sec-h red"><span>Überfällig</span><span><button type="button" class="txt-btn small" data-action="overdue-today" data-ids="' + esc(overdue.map(function (t) { return t.id; }).join(',')) + '">Alle auf heute</button> ' + overdue.length + '</span></div>' + group(overdue) + '</section>';
     if (dueToday.length) lists += '<section><div class="sec-h"><span>Heute fällig</span><span>' + dueToday.length + '</span></div>' + group(dueToday) + '</section>';
     if (working.length) lists += '<section><div class="sec-h"><span>In Arbeit</span><span>' + working.length + '</span></div>' + group(working) + '</section>';
     if (next.length) lists += '<section><div class="sec-h"><span>Als Nächstes</span></div>' + group(next) + '</section>';
@@ -795,7 +808,7 @@
       '<div class="kpi streak"><span class="k-lbl">Serie</span><b>' + (sk ? I.flame : '') + num(sk) + '</b><span class="k-sub">' + (sk === 1 ? 'Tag' : 'Tage') + ' in Folge erledigt</span></div></div>';
 
     // Fokus-Timer
-    var focus = '<section class="widget focus-w"><div class="w-head"><span class="w-title">' + I.timer + ' Fokus-Timer</span><span class="w-sub">Konzentriert arbeiten</span></div>' +
+    var focus = '<section class="widget focus-w"><div class="w-head"><span class="w-title">' + I.timer + ' Fokus-Timer</span><span class="w-sub" id="focus-stat">' + esc(focusStat()) + '</span></div>' +
       (S.focusEnd ? '<div class="focus-run"><span class="focus-big" data-focus-time>' + mmss(focusLeft()) + '</span><button type="button" class="btn-t" data-action="focus-stop">Beenden</button></div>'
         : '<div class="focus-opts"><button type="button" class="btn-t" data-action="focus-start" data-min="15">15 Min</button><button type="button" class="btn-p" data-action="focus-start" data-min="25">25 Min</button><button type="button" class="btn-t" data-action="focus-start" data-min="50">50 Min</button></div>') + '</section>';
 
@@ -819,19 +832,22 @@
     }
 
     var mus = musicHtml();
-    return head + '<div class="music-m" data-slot="music"' + (mus ? '' : ' hidden') + '>' + mus + '</div>' + briefCard() + goalCard() + weekCard() + planCard() + quickAdd() + '<div class="scope-row"><span class="scope-ai">' + aiBtn('ai-plan', 'Tag planen') + '</span><div class="scope">' + segc({ list: [{ k: 'me', l: 'Ich' }, { k: 'team', l: 'Team' }], sel: S.scope, action: 'scope', label: 'Ansicht' }) + '</div></div>' + kpis +
-      '<div class="widgets"><section class="widget"><div class="w-head"><span class="w-title">' + (mine ? 'Deine Aufgaben' : 'Team gesamt') + '</span><span class="w-sub">' + st.done + ' von ' + st.total + '</span></div>' +
+    var parts = { brief: briefCard(), goal: goalCard(), week: weekCard(), plan: planCard(), notes: notesCard(), shutdown: shutdownCard() };
+    var top = homeCfg().order.filter(function (k) { return k !== 'stats' && k !== 'mail'; }).map(function (k) { return homeBlock(k, parts); }).join('');
+    return head + '<div class="music-m" data-slot="music"' + (mus ? '' : ' hidden') + '>' + mus + '</div>' + top + quickAdd() + '<div class="scope-row"><span class="scope-ai">' + aiBtn('ai-plan', 'Tag planen') + aiBtn('ai-mail', 'E-Mail → Aufgaben') + '</span><div class="scope">' + segc({ list: [{ k: 'me', l: 'Ich' }, { k: 'team', l: 'Team' }], sel: S.scope, action: 'scope', label: 'Ansicht' }) + '</div></div>' + (homeOn('stats') ? kpis : '') +
+      (homeOn('stats') ? '' : '<div hidden>') + '<div class="widgets"><section class="widget"><div class="w-head"><span class="w-title">' + (mine ? 'Deine Aufgaben' : 'Team gesamt') + '</span><span class="w-sub">' + st.done + ' von ' + st.total + '</span></div>' +
       '<div class="ring-line">' + ring(st.pct) + '<div class="legend">' +
       '<div class="lg"><i class="dot" style="--c:var(--accent)"></i><span>Erledigt</span><b>' + st.done + '</b></div>' +
       '<div class="lg"><i class="dot" style="--c:var(--c-orange)"></i><span>In Arbeit</span><b>' + st.work + '</b></div>' +
       '<div class="lg"><i class="dot" style="--c:var(--label3)"></i><span>Offen</span><b>' + st.open + '</b></div></div></div></section>' +
-      '<section class="widget"><div class="w-head"><span class="w-title">Letzte 7 Tage</span><span class="w-sub">' + pl(wk.total, 'Aufgabe', 'Aufgaben') + ' erledigt</span></div><div class="bars">' + wk.html + '</div></section>' + focus + side + '</div>' + mailCard() +
-      '<div class="grid2">' + lists + '</div>';
+      '<section class="widget"><div class="w-head"><span class="w-title">Letzte 7 Tage</span><span class="w-sub">' + pl(wk.total, 'Aufgabe', 'Aufgaben') + ' erledigt</span></div><div class="bars">' + wk.html + '</div></section>' + focus + side + '</div>' + (homeOn('stats') ? '' : '</div>') + (homeOn('mail') ? mailCard() : '') +
+      '<div class="grid2">' + lists + '</div>' + '<p class="meta-line center"><button type="button" class="txt-btn small" data-action="home-edit">„Heute“ anpassen</button></p>';
   }
 
   /* ================= Ansicht: Board ================= */
   function boardCols() {
     if (S.boardView === 'list') return listView();
+    if (S.boardView === 'matrix') return matrixView();
     var q = S.search.toLowerCase();
     var L = filterTasks();
     function sect(key) {
@@ -858,13 +874,13 @@
       return '<option value="' + esc(p.id) + '"' + (S.filterProject === p.id ? ' selected' : '') + '>' + esc(p.name) + '</option>';
     }).join('');
     return title + quickAdd() + '<div class="board-bar"><div class="search">' + I.search + '<label class="vh" for="f-search">Aufgaben suchen</label><input id="f-search" type="search" placeholder="Suchen" autocomplete="off" value="' + esc(S.search) + '"></div>' +
-      (S.boardView === 'list' ? '' : '<div class="statseg">' + segc({ list: STATUS, sel: S.boardStatus, action: 'board-status', label: 'Status' }) + '</div>') +
+      (S.boardView === 'list' || S.boardView === 'matrix' ? '' : '<div class="statseg">' + segc({ list: STATUS, sel: S.boardStatus, action: 'board-status', label: 'Status' }) + '</div>') +
       '<div class="filters">' + segc({ list: [{ k: 'all', l: 'Alle' }, { k: 'mine', l: 'Meine' }], sel: S.filterMine ? 'mine' : 'all', action: 'board-filter', cls: 'auto', label: 'Zuständigkeit' }) +
       '<label class="vh" for="f-project">Projekt filtern</label><select class="pill" id="f-project">' + projOpts + '</select>' +
       '<label class="vh" for="f-due">Fälligkeit filtern</label><select class="pill" id="f-due">' + opts(DUE_F, S.filterDue) + '</select>' +
       '<label class="vh" for="f-prio">Priorität filtern</label><select class="pill" id="f-prio">' + opts(PRIO_F, S.filterPrio) + '</select>' +
-      '<span class="spacer"></span>' + segc({ list: [{ k: 'cols', l: 'Spalten' }, { k: 'list', l: 'Liste' }], sel: S.boardView, action: 'board-view', cls: 'auto', label: 'Ansicht' }) + '</div></div>' +
-      '<div class="cols' + (S.search ? ' searching' : '') + (S.boardView === 'list' ? ' listmode' : '') + '" id="board-cols">' + boardCols() + '</div>';
+      '<span class="spacer"></span>' + segc({ list: [{ k: 'cols', l: 'Spalten' }, { k: 'list', l: 'Liste' }, { k: 'matrix', l: 'Matrix' }], sel: S.boardView, action: 'board-view', cls: 'auto', label: 'Ansicht' }) + '</div></div>' +
+      '<div class="cols' + (S.search ? ' searching' : '') + (S.boardView === 'list' ? ' listmode' : S.boardView === 'matrix' ? ' matrixmode' : '') + '" id="board-cols">' + boardCols() + '</div>';
   }
   function byName(a, b) { return String(a.name).localeCompare(String(b.name), 'de'); }
 
@@ -1269,6 +1285,7 @@
     return list.map(function (m) {
       return '<div class="mail-row"><button type="button" class="mail-main" data-action="mail-open" data-id="' + esc(m.id) + '"><span class="mail-top"><b>' + esc(m.from) + '</b><time>' + esc(m.date ? ago(m.date) : '') + '</time></span>' +
         '<span class="mail-s">' + esc(m.subject) + '</span><span class="mail-n">' + esc(m.snippet) + '</span></button>' +
+        (aiOn() ? '<button type="button" class="pill-btn ai-pill" data-action="mail-ai" data-id="' + esc(m.id) + '" title="Mit KI lesen: Zusammenfassung, Aufgaben, Fristen">' + SPARK + '</button>' : '') +
         '<button type="button" class="pill-btn" data-action="mail-task" data-id="' + esc(m.id) + '">Aufgabe</button></div>';
     }).join('');
   }
@@ -1283,7 +1300,7 @@
     if (!gmAuth()) return '';
     var n = GM.list && gmValid() ? GM.list.length : 0;
     return '<section class="widget mail-w" data-slot="mail"><div class="w-head"><span class="w-title">' + IC.mail + ' Posteingang</span><span class="w-sub">' + (n ? n + ' ungelesen' : '') + '</span>' +
-      (n > 4 ? '<button type="button" class="txt-btn small" data-action="mail-all">Alle</button>' : '') + '</div>' + mailBody(4) + '</section>';
+      (n ? aiBtn('mail-ai-all', 'Alle auswerten') : '') + (n > 4 ? '<button type="button" class="txt-btn small" data-action="mail-all">Alle</button>' : '') + '</div>' + mailBody(4) + '</section>';
   }
   function mailUI() {
     var el = document.querySelector('[data-slot="mail"]');
@@ -1672,6 +1689,339 @@
     if (v.innerHTML !== h) v.innerHTML = h;
   }
 
+  /* ---------- E-Mail-Assistent: KI liest Mails und macht Aufgaben mit Fristen ---------- */
+  // Quellen: Gmail (mit einem Klick, auch ganzer Posteingang), eingefügter Text oder eine .eml-Datei.
+  function b64bytes(s) { var bin = atob(String(s).replace(/-/g, '+').replace(/_/g, '/').replace(/\s/g, '')); var a = new Uint8Array(bin.length); for (var i = 0; i < bin.length; i++) a[i] = bin.charCodeAt(i); return a; }
+  function decodeBytes(bytes, cs) { try { return new TextDecoder(/^(utf-?8|us-ascii|)$/i.test(cs || '') ? 'utf-8' : cs).decode(bytes); } catch (e) { return new TextDecoder('utf-8').decode(bytes); } }
+  // Zitate früherer Mails und Signaturen kürzen, damit die KI nur das Neue liest
+  function trimMail(t) {
+    t = String(t || '').replace(/\r/g, '');
+    var cut = t.search(/\n(?:Am .{4,120} schrieb .{0,120}:|On .{4,120} wrote:|-{2,} ?(?:Original|Ursprüngliche) (?:Message|Nachricht) ?-{2,}|Von: .+\n(?:Gesendet|Datum): )/);
+    if (cut > 15) t = t.slice(0, cut);
+    return t.split('\n').filter(function (l) { return !/^\s*>/.test(l); }).join('\n').replace(/\n{3,}/g, '\n\n').trim().slice(0, 12000);
+  }
+  function gmPartText(p) {
+    if (!p) return '';
+    var mt = String(p.mimeType || '');
+    if (p.parts && p.parts.length) {
+      var plain = '', html = '';
+      p.parts.forEach(function (x) { var t = gmPartText(x); if (!t) return; if (/text\/html/.test(x.mimeType || '') || x._html) html = html || t; else plain = plain || t; });
+      return plain || html;
+    }
+    if (!p.body || !p.body.data) return '';
+    var cs = (/charset="?([\w-]+)/i.exec(mHead(p, 'content-type')) || [])[1];
+    var txt = decodeBytes(b64bytes(p.body.data), cs);
+    return /text\/html/.test(mt) ? plainText(txt.replace(/<(br|\/p|\/div|\/li|\/tr)[^>]*>/gi, '\n')) : /text\/plain/.test(mt) ? txt : '';
+  }
+  function gmFull(m) {
+    return gmApi('/messages/' + encodeURIComponent(m.id) + '?format=full').then(function (j) {
+      return { from: m.from + (m.addr && m.addr !== m.from ? ' <' + m.addr + '>' : ''), subject: m.subject, date: m.date ? new Date(m.date).toISOString().slice(0, 10) : '', text: trimMail(gmPartText(j.payload) || m.snippet) };
+    }, function () { return { from: m.from, subject: m.subject, date: '', text: m.snippet }; });
+  }
+  function mailText(x) { return (x.from ? 'Von: ' + x.from + '\n' : '') + (x.subject ? 'Betreff: ' + x.subject + '\n' : '') + (x.date ? 'Datum: ' + x.date + '\n' : '') + '\n' + (x.text || ''); }
+  function mailAi(id) {
+    var m = (GM.list || []).filter(function (x) { return x.id === id; })[0]; if (!m) return;
+    if (S.sheet) closeSheet();
+    busy(1);
+    gmFull(m).then(function (x) {
+      busy(-1);
+      openDraft('mail', { input: mailText(x), link: gmLink(m) });
+      setTimeout(function () { draftAi(null, 'mail'); }, 120);
+    });
+  }
+  function mailAiAll() {
+    var list = (GM.list || []).slice(0, 10); if (!list.length) return;
+    if (S.sheet) closeSheet();
+    openDraft('mail', { batch: list.length, busy: true });
+    Promise.all(list.map(gmFull)).then(function (mails) {
+      if (!S.draft || S.draft.kind !== 'mail') return;
+      S.draft.mails = mails; S.draft.links = list.map(gmLink);
+      draftAi(null, 'mail');
+    });
+  }
+  // .eml-Datei (z. B. aus Outlook „Speichern unter“ oder Thunderbird) lesen
+  function qpDecode(s) { return s.replace(/=\r?\n/g, '').replace(/(=[0-9A-F]{2})+/gi, function (m) { var b = m.split('=').slice(1).map(function (h) { return parseInt(h, 16); }); return decodeBytes(new Uint8Array(b), 'utf-8'); }); }
+  function mimeWords(s) {
+    return String(s || '').replace(/=\?([\w-]+)\?([BQ])\?([^?]*)\?=/gi, function (_, cs, enc, txt) {
+      try { return enc.toUpperCase() === 'B' ? decodeBytes(b64bytes(txt), cs) : decodeBytes(new Uint8Array(txt.replace(/_/g, ' ').replace(/=([0-9A-F]{2})/gi, function (m, h) { return String.fromCharCode(parseInt(h, 16)); }).split('').map(function (c) { return c.charCodeAt(0); })), cs); } catch (e) { return txt; }
+    });
+  }
+  function emlPart(raw) {
+    var i = raw.search(/\r?\n\r?\n/), head = i < 0 ? raw : raw.slice(0, i), body = i < 0 ? '' : raw.slice(i).replace(/^\r?\n\r?\n/, '');
+    head = head.replace(/\r?\n[ \t]+/g, ' ');
+    var h = function (n) { var m = new RegExp('^' + n + ':\\s*(.*)$', 'im').exec(head); return m ? m[1].trim() : ''; };
+    var ct = h('Content-Type') || 'text/plain', bd = (/boundary="?([^";]+)"?/i.exec(ct) || [])[1], cs = (/charset="?([\w-]+)/i.exec(ct) || [])[1], te = h('Content-Transfer-Encoding').toLowerCase();
+    var text = '';
+    if (/multipart\//i.test(ct) && bd) {
+      var parts = body.split('--' + bd).slice(1).filter(function (x) { return !/^--/.test(x); }).map(function (x) { return emlPart(x.replace(/^\r?\n/, '')); });
+      var pl = parts.filter(function (x) { return x.kind === 'plain' && x.text; })[0], ht = parts.filter(function (x) { return x.kind === 'html' && x.text; })[0];
+      text = (pl || ht || {}).text || '';
+      return { head: h, kind: pl ? 'plain' : 'html', text: text };
+    }
+    if (te === 'base64') { try { body = decodeBytes(b64bytes(body), cs); } catch (e) {} }
+    else if (te === 'quoted-printable') body = qpDecode(body);
+    var html = /text\/html/i.test(ct);
+    if (html) body = plainText(body.replace(/<(br|\/p|\/div|\/li|\/tr)[^>]*>/gi, '\n'));
+    return { head: h, kind: /text\/plain/i.test(ct) ? 'plain' : html ? 'html' : 'other', text: /text\//i.test(ct) ? body : '' };
+  }
+  function readMailFile(f) {
+    if (!f) return;
+    if (/\.msg$/i.test(f.name)) { toast('Outlook-.msg geht leider nicht. In Outlook „Speichern unter“ → .eml wählen oder den Text kopieren.'); return; }
+    if (f.size > 8 * 1024 * 1024) { toast('Die Datei ist zu groß.'); return; }
+    f.text().then(function (raw) {
+      var p = /\.eml$/i.test(f.name) || /^(Received|From|Return-Path|MIME-Version|Message-ID):/im.test(raw.slice(0, 2000)) ? emlPart(raw) : null;
+      var x = p ? { from: mimeWords(p.head('From')), subject: mimeWords(p.head('Subject')), date: p.head('Date'), text: trimMail(p.text) } : { text: trimMail(raw) };
+      var inp = $('draft-in'); if (inp) { inp.value = mailText(x).trim(); autoGrow && autoGrow(inp); }
+      if (S.draft) S.draft.input = inp ? inp.value : '';
+      toast('E-Mail geladen');
+    }, function () { toast('Die Datei konnte nicht gelesen werden.'); });
+  }
+  document.addEventListener('dragover', function (e) { if (e.target.closest && e.target.closest('.mail-drop')) { e.preventDefault(); e.target.closest('.mail-drop').classList.add('over'); } });
+  document.addEventListener('dragleave', function (e) { var z = e.target.closest && e.target.closest('.mail-drop'); if (z) z.classList.remove('over'); });
+  document.addEventListener('drop', function (e) {
+    var z = e.target.closest && e.target.closest('.mail-drop'); if (!z) return;
+    e.preventDefault(); z.classList.remove('over');
+    var f = e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0];
+    if (f) readMailFile(f);
+    else { var t = e.dataTransfer && e.dataTransfer.getData('text/plain'); if (t && $('draft-in')) $('draft-in').value = t; }
+  });
+  function mailSumHtml(d) {
+    var r = d.mailSum; if (!r) return '';
+    var many = (r.mails || []).length > 1;
+    return '<div class="ai-card mail-sum"><div class="ai-h">' + SPARK + ' <b>' + (many ? 'Dein Posteingang' : 'Zusammenfassung') + '</b></div><p>' + esc(r.summary) + '</p>' +
+      (r.reply_needed ? '<p class="reply-need">↩︎ <b>Antwort nötig' + (r.reply_due ? ' bis ' + esc(dueLabel(r.reply_due)) : '') + '</b>' + (r.reply_hint ? ' – ' + esc(r.reply_hint) : '') + '</p>' : '') +
+      (many ? '<ul class="mail-sums">' + r.mails.map(function (x) { var m = d.mails && d.mails[x.i]; return m ? '<li' + (x.important ? ' class="imp"' : '') + '><b>' + esc(m.subject || '(ohne Betreff)') + '</b><span>' + esc(x.summary) + '</span></li>' : ''; }).join('') + '</ul>' : '') + '</div>';
+  }
+
+  /* ================= Notizen (4.0) ================= */
+  // Privat oder fürs Team; speichert automatisch beim Tippen.
+  var NOTE_COLORS = ['gray', 'blue', 'green', 'orange', 'red', 'purple', 'teal', 'pink'];
+  var noteT = 0, noteBusy = false, noteAgain = false;
+  function noteSorted(list) { return list.slice().sort(function (a, b) { return (b.pinned ? 1 : 0) - (a.pinned ? 1 : 0) || (a.updated_at < b.updated_at ? 1 : -1); }); }
+  function noteTitle(n) { return n.title || (String(n.body || '').split('\n').filter(function (l) { return l.trim(); })[0] || 'Neue Notiz').slice(0, 80); }
+  function noteCard(n) {
+    var body = String(n.body || ''), ex = n.title ? body : body.split('\n').slice(1).join('\n');
+    return '<button type="button" class="note-card" data-action="note-open" data-id="' + esc(n.id) + '" style="--c:var(--c-' + colorOf(n.color) + ')">' +
+      '<b>' + (n.pinned ? '<span class="pin" title="Angeheftet">📌</span> ' : '') + esc(noteTitle(n)) + '</b>' +
+      (ex.trim() ? '<p>' + esc(ex.trim().slice(0, 220)) + '</p>' : '') +
+      '<span class="note-meta">' + (n.shared ? 'Team' : 'Privat') + ' · ' + esc(ago(n.updated_at)) + (n.shared && n.user_id && n.user_id !== S.uid ? ' · ' + esc(who(n.user_id).first) : '') + '</span></button>';
+  }
+  function viewNotizen() {
+    var q = (S.noteQ || '').toLowerCase(), f = S.noteF || 'all';
+    var L = noteSorted(S.notes.filter(function (n) {
+      if (f === 'mine' && n.shared) return false;
+      if (f === 'team' && !n.shared) return false;
+      return !q || (n.title + ' ' + n.body).toLowerCase().indexOf(q) >= 0;
+    }));
+    return '<h1 class="large title-only">Notizen</h1>' +
+      '<div class="note-bar"><label class="vh" for="note-q">Notizen durchsuchen</label><input id="note-q" class="search-in" type="search" placeholder="Notizen durchsuchen" value="' + esc(S.noteQ || '') + '" autocomplete="off">' +
+      segc({ list: [{ k: 'all', l: 'Alle' }, { k: 'mine', l: 'Privat' }, { k: 'team', l: 'Team' }], sel: f, action: 'note-filter', cls: 'auto', label: 'Filter' }) +
+      '<button type="button" class="btn-p small-btn" data-action="note-new">+ Neue Notiz</button></div>' +
+      (L.length ? '<div class="notes-grid">' + L.map(noteCard).join('') + '</div>'
+        : '<div class="empty"><h2>' + (q ? 'Nichts gefunden' : 'Noch keine Notizen') + '</h2><p>' + (q ? 'Versuche ein anderes Wort.' : 'Halte Ideen, Besprechungen und Wissen fest – privat oder fürs ganze Team. Aus jeder Notiz macht die KI auf Wunsch Aufgaben.') + '</p>' +
+          (q ? '' : '<div class="row-actions"><button class="btn-p" type="button" data-action="note-new">Erste Notiz schreiben</button></div>') + '</div>');
+  }
+  function noteSheet(id) {
+    var n = id ? byId(S.notes, id) : null;
+    if (id && !n) return '';
+    var v = n || S.noteNew || { title: '', body: '', shared: false, pinned: false, color: 'gray' };
+    S.noteNew = n ? null : v;
+    var mine = !n || n.user_id === S.uid, canDel = !n || mine || iAmOwner();
+    return wrapForm('note-form', id, head(n ? 'Notiz' : 'Neue Notiz', '', 'Fertig') +
+      '<div class="group first"><div class="f row"><input id="n-title" type="text" maxlength="200" autocomplete="off" placeholder="Titel" aria-label="Titel" value="' + esc(v.title) + '"></div>' +
+      '<div class="f row"><textarea id="n-body" rows="12" maxlength="20000" placeholder="Schreib los … Ideen, Besprechung, Wissen" aria-label="Notiz">' + esc(v.body) + '</textarea></div></div>' +
+      '<p class="meta-line" id="note-state">' + (n ? 'Gespeichert · ' + esc(ago(n.updated_at)) : 'Wird beim Tippen automatisch gespeichert') + '</p>' +
+      '<div class="sec-h"><span>Sichtbar für</span></div>' + segc({ list: [{ k: 'private', l: 'Nur mich' }, { k: 'team', l: 'Ganzes Team' }], sel: v.shared ? 'team' : 'private', action: 'note-share', label: 'Sichtbarkeit' }) +
+      (n && n.shared && !mine ? '<p class="meta-line">Geteilt von ' + esc(who(n.user_id).first) + '.</p>' : '') +
+      '<div class="group" style="margin-top:12px"><button type="button" class="row-btn" data-action="note-pin"><span class="grow">Auf „Heute“ anheften</span><span class="muted" id="note-pin">' + (v.pinned ? 'An' : 'Aus') + '</span></button>' +
+      '<div class="row-btn static"><span class="grow">Farbe</span><span class="note-colors">' + NOTE_COLORS.map(function (c) { return '<button type="button" class="ncol' + (v.color === c ? ' on' : '') + '" data-action="note-color" data-c="' + c + '" style="--c:var(--c-' + c + ')" aria-label="' + esc(COLOR_NAMES[c]) + '"></button>'; }).join('') + '</span></div></div>' +
+      '<div class="ai-row" style="margin-top:14px">' + aiBtn('note-ai', 'Aufgaben daraus machen') + '</div>' +
+      (canDel && n ? '<div class="group" style="margin-top:18px"><button type="button" class="row-btn destructive" data-action="note-del">' + (S.armed === 'note:' + n.id ? 'Wirklich löschen?' : 'Notiz löschen') + '</button></div>' : ''));
+  }
+  function noteForm() { var f = $('note-form'); return f && S.sheet && S.sheet.kind === 'note' ? f : null; }
+  function noteVals() {
+    var f = noteForm(); if (!f) return null;
+    var id = f.dataset.id, n = id ? byId(S.notes, id) : S.noteNew;
+    return { id: id, title: $('n-title').value.trim().slice(0, 200), body: $('n-body').value.slice(0, 20000), shared: !!(n && n.shared), pinned: !!(n && n.pinned), color: (n && n.color) || 'gray' };
+  }
+  function noteQueue() { clearTimeout(noteT); var st = $('note-state'); if (st) st.textContent = 'Speichert …'; noteT = setTimeout(noteSave, 700); }
+  function noteSave() {
+    clearTimeout(noteT); noteT = 0;
+    var v = noteVals(); if (!v) return Promise.resolve();
+    if (noteBusy) { noteAgain = true; return Promise.resolve(); }
+    var st = $('note-state');
+    if (!v.id && !v.title && !v.body.trim()) { if (st) st.textContent = 'Wird beim Tippen automatisch gespeichert'; return Promise.resolve(); }
+    var data = { title: v.title, body: v.body, shared: v.shared, pinned: v.pinned, color: v.color };
+    noteBusy = true;
+    var job = v.id ? run(S.sb.from('notes').update(data).eq('id', v.id).select().single()) : run(S.sb.from('notes').insert(Object.assign({ workspace_id: S.ws }, data)).select().single());
+    return job.then(function (r) {
+      noteBusy = false;
+      if (r) { upsert('notes', r); var f = noteForm(); if (f && !v.id) { f.dataset.id = r.id; S.sheet.id = r.id; S.noteNew = null; } }
+      var s2 = $('note-state'); if (s2) s2.textContent = 'Gespeichert';
+      if (noteAgain) { noteAgain = false; noteSave(); }
+      queue();
+    }, function (e) { noteBusy = false; var s3 = $('note-state'); if (s3) s3.textContent = errText(e); });
+  }
+  function noteSet(k, val) {
+    var f = noteForm(); if (!f) return;
+    var n = f.dataset.id ? byId(S.notes, f.dataset.id) : S.noteNew;
+    if (!n) return;
+    n[k] = val;
+    if (k === 'pinned') { var p = $('note-pin'); if (p) p.textContent = val ? 'An' : 'Aus'; }
+    if (k === 'color') Array.prototype.forEach.call(f.querySelectorAll('.ncol'), function (b) { b.classList.toggle('on', b.dataset.c === val); });
+    noteSave();
+  }
+  function noteDel() {
+    var f = noteForm(); if (!f || !f.dataset.id) return;
+    var id = f.dataset.id;
+    if (S.armed !== 'note:' + id) { S.armed = 'note:' + id; var b = f.querySelector('[data-action="note-del"]'); if (b) b.textContent = 'Wirklich löschen?'; return; }
+    S.armed = null;
+    run(S.sb.from('notes').delete().eq('id', id)).then(function () { S.notes = S.notes.filter(function (n) { return n.id !== id; }); closeSheet(); toast('Notiz gelöscht'); queue(); }, function (e) { toast(errText(e)); });
+  }
+  function noteAi() {
+    var v = noteVals(); if (!v) return;
+    var text = ((v.title ? v.title + '\n\n' : '') + v.body).trim();
+    if (!text) { toast('Die Notiz ist noch leer.'); return; }
+    noteSave();
+    closeSheet();
+    setTimeout(function () { openDraft('extract', { input: text.slice(0, 12000) }); setTimeout(function () { draftAi(null, 'extract'); }, 150); }, 320);
+  }
+  function notesCard() {
+    var P = noteSorted(S.notes.filter(function (n) { return n.pinned; })).slice(0, 4);
+    if (!P.length) return '';
+    return '<section class="widget pins-w"><div class="w-head"><span class="w-title">📌 Angeheftet</span><button type="button" class="txt-btn small" data-action="go-notes">Alle Notizen</button></div><div class="pins">' + P.map(noteCard).join('') + '</div></section>';
+  }
+
+  /* ================= Tagesabschluss ================= */
+  var LS_SHUT = 'effectra.shutdown';
+  function shutdownCard() {
+    if (ls(LS_SHUT) === today() || new Date().getHours() < 15) return '';
+    var t0 = today(), done = S.tasks.filter(function (t) { return isMine(t) && t.status === 'erledigt' && t.done_at && ymd(new Date(t.done_at)) === t0; }).length;
+    return '<section class="widget shut-w"><div class="shut-in"><span class="shut-ic">🌙</span><span class="txt"><b>Feierabend in Sicht?</b><span>Heute ' + pl(done, 'Aufgabe', 'Aufgaben') + ' erledigt. Schließ den Tag in einer Minute ab – Offenes wandert auf morgen.</span></span>' +
+      '<button type="button" class="btn-t" data-action="shutdown">Tag abschließen</button></div></section>';
+  }
+  function shutdownSheet() {
+    var t0 = today(), mine = S.tasks.filter(isMine);
+    var done = mine.filter(function (t) { return t.status === 'erledigt' && t.done_at && ymd(new Date(t.done_at)) === t0; });
+    var open = mine.filter(function (t) { return t.status !== 'erledigt' && t.due && t.due <= t0; }).sort(sortActive);
+    var fm = focusMin(t0);
+    return wrapForm('shut-form', '', head('Tag abschließen', '', 'Abbrechen') +
+      '<div class="shut-stats"><div><b>' + done.length + '</b><span>erledigt</span></div><div><b>' + open.length + '</b><span>noch offen</span></div><div><b>' + fmtMin(fm) + '</b><span>Fokus</span></div></div>' +
+      (done.length ? '<div class="sec-h"><span>Geschafft 🎉</span></div><div class="group">' + done.slice(0, 8).map(function (t) { return '<div class="row-btn static"><span class="grow done-t">' + esc(t.title) + '</span></div>'; }).join('') + '</div>' : '') +
+      (open.length ? '<div class="sec-h"><span>Auf morgen verschieben</span><span>' + open.length + '</span></div><div class="group">' + open.map(function (t) {
+        return '<label class="row-btn sd-row"><input type="checkbox" class="sd-t" data-id="' + esc(t.id) + '" checked><span class="grow">' + esc(t.title) + '</span><span class="muted">' + esc(dueLabel(t.due)) + '</span></label>';
+      }).join('') + '</div>' : '<p class="meta-line">Nichts Offenes für heute – stark!</p>') +
+      '<div class="sec-h"><span>Notiz für morgen</span></div><div class="group"><div class="f row"><textarea id="sd-note" rows="3" maxlength="2000" placeholder="Womit startest du morgen? Was solltest du nicht vergessen?"></textarea></div></div>' +
+      '<button type="button" class="btn-p block" data-action="shutdown-go">Tag abschließen</button>');
+  }
+  function shutdownGo(btn) {
+    var ids = Array.prototype.slice.call(document.querySelectorAll('.sd-t:checked')).map(function (x) { return x.dataset.id; });
+    var note = ($('sd-note') && $('sd-note').value.trim()) || '', tm = addDays(today(), 1), jobs = [];
+    if (btn) btn.disabled = true;
+    if (ids.length) jobs.push(run(S.sb.from('tasks').update({ due: tm }).in('id', ids).select()).then(function (rows) { (rows || []).forEach(function (r) { upsert('tasks', r); }); }));
+    if (note) jobs.push(run(S.sb.from('notes').insert({ workspace_id: S.ws, title: 'Für morgen – ' + fmtShort.format(parse(tm)), body: note, pinned: true, color: 'purple' }).select().single()).then(function (r) { if (r) upsert('notes', r); }));
+    Promise.all(jobs).then(function () {
+      ls(LS_SHUT, today()); closeSheet();
+      celebrate(window.innerWidth / 2, window.innerHeight / 3);
+      toast(ids.length ? pl(ids.length, 'Aufgabe', 'Aufgaben') + ' auf morgen verschoben. Schönen Feierabend!' : 'Schönen Feierabend!');
+      queue();
+    }, function (e) { if (btn) btn.disabled = false; toast(errText(e)); });
+  }
+
+  /* ================= Prioritäten-Matrix ================= */
+  var QUADS = [
+    { k: 'do', t: 'Sofort erledigen', s: 'wichtig & dringend', c: 'red' },
+    { k: 'plan', t: 'Einplanen', s: 'wichtig, nicht dringend', c: 'blue' },
+    { k: 'give', t: 'Abgeben oder kurz erledigen', s: 'dringend, nicht wichtig', c: 'orange' },
+    { k: 'later', t: 'Später oder streichen', s: 'weder noch', c: 'gray' }
+  ];
+  function quadOf(t) {
+    var urg = !!t.due && t.due <= addDays(today(), 2), imp = t.priority === 3;
+    return imp && urg ? 'do' : imp ? 'plan' : urg ? 'give' : 'later';
+  }
+  function matrixView() {
+    var L = filterTasks().filter(function (t) { return t.status !== 'erledigt'; });
+    return '<div class="matrix">' + QUADS.map(function (q) {
+      var list = L.filter(function (t) { return quadOf(t) === q.k; }).sort(sortActive);
+      return '<section class="quad" data-quad="' + q.k + '" style="--c:var(--c-' + q.c + ')"><div class="quad-h"><b>' + esc(q.t) + '</b><span>' + esc(q.s) + ' · ' + list.length + '</span></div>' +
+        (list.length ? '<div class="group">' + list.slice(0, 30).map(function (t) { return row(t, true); }).join('') + '</div>' : '<p class="empty-col">Leer</p>') + '</section>';
+    }).join('') + '</div><p class="meta-line">Wichtig = Priorität „hoch“ (!). Dringend = fällig in den nächsten 2 Tagen. Am PC kannst du Aufgaben in ein anderes Feld ziehen.</p>';
+  }
+  // Ziehen zwischen den Feldern ändert Priorität bzw. Fälligkeit
+  function quadMove(id, k) {
+    var t = byId(S.tasks, id); if (!t || quadOf(t) === k) return;
+    var data = {}, t2 = addDays(today(), 2);
+    if (k === 'do' || k === 'plan') data.priority = 3; else data.priority = t.priority === 3 ? 2 : t.priority;
+    if (k === 'do' || k === 'give') { if (!t.due || t.due > t2) data.due = today(); }
+    else if (t.due && t.due <= t2) data.due = null;
+    patchTask(id, data, 'Verschoben nach „' + QUADS.filter(function (q) { return q.k === k; })[0].t + '“');
+  }
+  document.addEventListener('dragover', function (e) { var q = e.target.closest && e.target.closest('.quad'); if (q && S.dragTask) { e.preventDefault(); q.classList.add('over'); } });
+  document.addEventListener('dragleave', function (e) { var q = e.target.closest && e.target.closest('.quad'); if (q && !q.contains(e.relatedTarget)) q.classList.remove('over'); });
+  document.addEventListener('drop', function (e) {
+    var q = e.target.closest && e.target.closest('.quad'); if (!q || !S.dragTask) return;
+    e.preventDefault(); q.classList.remove('over'); quadMove(S.dragTask, q.dataset.quad);
+  });
+  document.addEventListener('dragstart', function (e) { var r = e.target.closest && e.target.closest('[data-task]'); S.dragTask = r ? r.dataset.task : null; });
+  document.addEventListener('dragend', function () { setTimeout(function () { S.dragTask = null; }, 50); });
+
+  /* ================= „Heute“ anpassen ================= */
+  var LS_HOME = 'effectra.home';
+  var HOME = [
+    { k: 'brief', l: 'KI-Überblick am Morgen' }, { k: 'goal', l: 'Tagesziel' }, { k: 'notes', l: 'Angeheftete Notizen' }, { k: 'shutdown', l: 'Tagesabschluss (ab 15 Uhr)' },
+    { k: 'week', l: 'Wochenrückblick' }, { k: 'plan', l: 'Tagesplan der KI' }, { k: 'stats', l: 'Zahlen & Diagramme' }, { k: 'mail', l: 'Posteingang (Gmail)' }
+  ];
+  function homeCfg() {
+    var c = jget(LS_HOME) || {}, order = (c.order || []).filter(function (k) { return HOME.some(function (h) { return h.k === k; }); });
+    HOME.forEach(function (h) { if (order.indexOf(h.k) < 0) order.push(h.k); });
+    return { order: order, off: c.off || [] };
+  }
+  function homeOn(k) { return homeCfg().off.indexOf(k) < 0; }
+  function homeSheet() {
+    var c = homeCfg();
+    return wrapForm('home-form', '', head('„Heute“ anpassen', '', 'Fertig') + '<p class="meta-line" style="margin-top:12px">Wähle, was du auf „Heute“ sehen willst, und in welcher Reihenfolge.</p><div class="group" id="home-list">' +
+      c.order.map(function (k, i) {
+        var h = HOME.filter(function (x) { return x.k === k; })[0], on = c.off.indexOf(k) < 0;
+        return '<div class="row-btn static home-row"><button type="button" class="tog' + (on ? ' on' : '') + '" role="switch" aria-checked="' + on + '" data-action="home-toggle" data-k="' + k + '" aria-label="' + esc(h.l) + '"><i></i></button>' +
+          '<span class="grow">' + esc(h.l) + '</span><button type="button" class="md-ic" data-action="home-up" data-k="' + k + '" aria-label="Nach oben"' + (i ? '' : ' disabled') + '>↑</button>' +
+          '<button type="button" class="md-ic" data-action="home-down" data-k="' + k + '" aria-label="Nach unten"' + (i < c.order.length - 1 ? '' : ' disabled') + '>↓</button></div>';
+      }).join('') + '</div><div class="group" style="margin-top:14px"><button type="button" class="row-btn accent" data-action="home-reset"><span class="grow">Zurücksetzen</span></button></div>');
+  }
+  function homeChange(fn) {
+    var c = homeCfg(); fn(c); jset(LS_HOME, c);
+    var tmp = document.createElement('div'); tmp.innerHTML = homeSheet();
+    var l = $('home-list'), nl = tmp.querySelector('#home-list'); if (l && nl) l.innerHTML = nl.innerHTML;
+    queue();
+  }
+  function homeBlock(k, parts) { return homeOn(k) ? (parts[k] || '') : ''; }
+
+  /* ================= Fokus-Statistik ================= */
+  var LS_FLOG = 'effectra.focuslog', LS_FSTART = 'effectra.focus.start';
+  function focusMin(day) { var l = jget(LS_FLOG) || {}; return Number(l[day]) || 0; }
+  function focusAdd(min) {
+    if (!(min >= 1)) return;
+    var l = jget(LS_FLOG) || {}, d = today();
+    l[d] = Math.round((Number(l[d]) || 0) + min);
+    var keys = Object.keys(l).sort(); while (keys.length > 60) delete l[keys.shift()];
+    jset(LS_FLOG, l);
+  }
+  function fmtMin(m) { return m >= 60 ? Math.floor(m / 60) + ' Std' + (m % 60 ? ' ' + (m % 60) + ' Min' : '') : m + ' Min'; }
+  function focusStat() {
+    var w = 0, ws = weekStart(today());
+    for (var i = 0; i < 7; i++) w += focusMin(addDays(ws, i));
+    var t = focusMin(today());
+    return t || w ? 'Heute ' + fmtMin(t) + ' · Woche ' + fmtMin(w) : 'Konzentriert arbeiten';
+  }
+
+  /* ================= Überfälliges auf heute ================= */
+  function overdueToday(ids) {
+    if (!ids.length) return;
+    var t0 = today();
+    ids.forEach(function (id) { var t = byId(S.tasks, id); if (t) { t.due = t0; S.mine[id] = Date.now(); } });
+    queue();
+    run(S.sb.from('tasks').update({ due: t0 }).in('id', ids).select()).then(function (rows) { (rows || []).forEach(function (r) { upsert('tasks', r); }); toast(pl(ids.length, 'Aufgabe', 'Aufgaben') + ' auf heute gelegt'); queue(); }, function (e) { toast(errText(e)); loadWs(); });
+  }
+
   /* ================= Schnellsuche (Strg+K) ================= */
   function palItems(q) {
     q = q.trim().toLowerCase();
@@ -1682,8 +2032,8 @@
       { l: 'Zum Board', h: '2', run: function () { goTab('board'); } },
       { l: 'Zum Kalender', h: '3', run: function () { goTab('kalender'); } },
       { l: 'Zu den Projekten', h: '4', run: function () { goTab('projekte'); } },
-      { l: 'Zu den Berichten', h: '5', run: function () { goTab('berichte'); } },
-      { l: 'Zum Team', h: '6', run: function () { goTab('team'); } },
+      { l: 'Zu den Berichten', h: '6', run: function () { goTab('berichte'); } },
+      { l: 'Zum Team', h: '7', run: function () { goTab('team'); } },
       { l: runningEntry() ? 'Zeiterfassung stoppen' : 'Zeiten exportieren (CSV)', run: function () { runningEntry() ? timerStop() : exportTimes(); } },
       { l: S.focusEnd ? 'Fokus-Timer beenden' : 'Fokus-Timer starten (25 Min)', run: function () { S.focusEnd ? focusStop() : focusStart(25); } },
       { l: 'Aufgaben als Excel/CSV exportieren', run: exportCsv },
@@ -1693,6 +2043,11 @@
       { l: 'Frag Effectra (KI-Chat)', h: 'J', run: function () { openSheet('chat'); } },
       { l: 'Aufgabe diktieren', run: function () { openDraft('voice'); setTimeout(voiceStart, 200); } },
       { l: 'Text in Aufgaben umwandeln (KI)', run: function () { openDraft('extract'); } },
+      { l: 'E-Mail mit KI auswerten', run: function () { openDraft('mail'); } },
+      { l: 'Neue Notiz', run: function () { S.noteNew = null; openSheet('note'); } },
+      { l: 'Zu den Notizen', h: '5', run: function () { goTab('notizen'); } },
+      { l: 'Tag abschließen', run: function () { openSheet('shutdown'); } },
+      { l: '„Heute“ anpassen', run: function () { openSheet('home'); } },
       { l: 'Projekt mit KI planen', run: function () { openDraft('project'); } },
       { l: 'Neue Vorlage', run: function () { openSheet('tpl'); } },
       { l: 'Aufgaben importieren (CSV)', run: function () { var fi = $('import-file'); if (fi) fi.click(); } },
@@ -1744,8 +2099,9 @@
   }
 
   /* ================= Fokus starten/stoppen ================= */
-  function focusStart(min) { alarmStop(); S.focusEnd = Date.now() + min * 60000; S.focusHide = false; ls(LS_FOCUS, String(S.focusEnd)); deskQuiet(true); toast('Fokus läuft: ' + min + ' Minuten'); render(); focusTick(); }
-  function focusStop() { S.focusEnd = 0; ls(LS_FOCUS, null); deskQuiet(false); render(); focusTick(); }
+  function focusLog() { var st = Number(ls(LS_FSTART)); if (st) focusAdd(Math.min(180, (Date.now() - st) / 60000)); ls(LS_FSTART, null); }
+  function focusStart(min) { alarmStop(); if (S.focusEnd) focusLog(); ls(LS_FSTART, String(Date.now())); S.focusEnd = Date.now() + min * 60000; S.focusHide = false; ls(LS_FOCUS, String(S.focusEnd)); deskQuiet(true); toast('Fokus läuft: ' + min + ' Minuten'); render(); focusTick(); }
+  function focusStop() { focusLog(); S.focusEnd = 0; ls(LS_FOCUS, null); deskQuiet(false); render(); focusTick(); }
 
   /* ================= Benachrichtigungen ================= */
   function notifyOn() { return ls(LS_NOTIFY) === '1' && typeof Notification !== 'undefined' && Notification.permission === 'granted'; }
@@ -2058,7 +2414,7 @@
     return wrapForm('wn-form', '', head('Was ist neu', '', 'Fertig') + updHero('Neu in Effectra ' + APP_VERSION, 'Das hat sich verbessert:') + notesList(CHANGES) +
       '<button type="button" class="btn-p block" data-action="close-sheet">Los geht’s</button>');
   }
-  var KEYS = [['Strg + K', 'Schnellsuche'], ['N', 'Neue Aufgabe'], ['1 – 6', 'Bereich wechseln'], ['/', 'Schnell-Eingabe'], ['Strg + B', 'Seitenleiste ein/aus'],
+  var KEYS = [['Strg + K', 'Schnellsuche'], ['N', 'Neue Aufgabe'], ['1 – 7', 'Bereich wechseln'], ['/', 'Schnell-Eingabe'], ['Strg + B', 'Seitenleiste ein/aus'],
     ['Rechtsklick', 'Menü für eine Aufgabe'], ['?', 'Diese Übersicht'], ['Esc', 'Schließen']];
   function keysSheet() {
     return wrapForm('keys-form', '', head('Tastenkürzel', '', 'Fertig') + '<div class="group keys" style="margin-top:12px">' +
@@ -2648,19 +3004,24 @@
       extract: { t: 'Text → Aufgaben', p: 'Füge Meeting-Notizen, eine E-Mail oder eine Liste ein. Die KI macht daraus fertige Aufgaben – du prüfst sie, bevor etwas angelegt wird.', ph: 'z. B. „Lea schickt bis Freitag das Angebot. Ich rufe morgen den Kunden an. Website-Texte nächste Woche fertig …“' },
       project: { t: 'Projekt mit KI planen', p: 'Beschreibe in einem Satz, was ihr vorhabt und bis wann. Die KI plant Schritte mit Terminen.', ph: 'z. B. „Website-Relaunch für Kunde Nord bis 15.12., mit Texten, Fotos und Testphase“' },
       voice: { t: 'Diktieren', p: '', ph: '' },
+      mail: { t: 'E-Mail auswerten', p: d.batch ? '' : 'Füge eine E-Mail ein oder zieh eine .eml-Datei hierher. Die KI fasst sie zusammen, erkennt Fristen und ob du antworten musst – und schlägt Aufgaben vor.', ph: 'E-Mail hier einfügen – am besten mit Absender und Betreff …' },
       import: { t: 'Aufgaben importieren', p: '', ph: '' }
     }[kind];
     var input = kind === 'extract' || kind === 'project' ? '<div class="group first"><div class="f row"><textarea id="draft-in" rows="' + (kind === 'project' ? 3 : 7) + '" maxlength="' + (kind === 'project' ? 2000 : 12000) + '" placeholder="' + esc(intro.ph) + '">' + esc(d.input || '') + '</textarea></div></div>' +
       '<div class="ai-row" style="margin-top:12px">' + aiBtn(kind === 'project' ? 'draft-plan' : 'draft-find', kind === 'project' ? 'Projekt planen' : 'Aufgaben finden') + '</div>' : '';
+    var mailIn = kind !== 'mail' ? '' : d.batch ? '<p class="meta-line" style="margin-top:12px">' + pl(d.batch, 'ungelesene Mail', 'ungelesene Mails') + ' aus Gmail – die KI liest sie und filtert, was wirklich zu tun ist.</p>' :
+      '<div class="group first mail-drop"><div class="f row"><textarea id="draft-in" rows="9" maxlength="20000" placeholder="' + esc(intro.ph) + '">' + esc(d.input || '') + '</textarea></div>' +
+      '<div class="row-btn static"><label class="txt-btn small file-pick">Datei wählen (.eml)<input type="file" id="mail-file" accept=".eml,.txt,message/rfc822" hidden></label><span class="grow muted">oder Datei hierher ziehen</span></div></div>' +
+      '<div class="ai-row" style="margin-top:12px">' + aiBtn('draft-mail', 'Auswerten') + '</div>';
     var voice = kind === 'voice' ? '<div class="voice"><button type="button" class="voice-btn' + (S.rec ? ' rec' : '') + '" data-action="voice-toggle" aria-label="' + (S.rec ? 'Aufnahme beenden' : 'Aufnahme starten') + '">' + I.mic + '</button>' +
       '<b id="voice-state">' + (S.rec ? 'Ich höre zu …' : d.tasks.length ? 'Fertig' : d.busy ? 'Wird ausgewertet …' : 'Tippen und sprechen') + '</b><span id="voice-time" class="muted">' + (S.rec ? '0:00' : 'z. B. „Morgen Kunde Nord anrufen, und Lea soll bis Freitag das Angebot schicken“') + '</span>' +
       (d.transcript ? '<p class="voice-tr">„' + esc(d.transcript) + '“</p>' : '') + '</div>' : '';
     var proj = d.project ? '<div class="group"><div class="f row"><input id="draft-pname" type="text" maxlength="80" value="' + esc(d.project.name) + '" aria-label="Projektname"></div>' +
       '<div class="row-btn static"><span class="grow muted">' + (d.project.due ? 'Deadline ' + esc(dueLabel(d.project.due)) : 'Ohne Deadline') + '</span><i class="dot" style="--c:var(--c-' + colorOf(d.project.color) + ')"></i></div></div>' : '';
-    return wrapForm('draft-form', '', head(intro.t, '', 'Schließen') + (intro.p ? '<p class="meta-line" style="margin-top:12px">' + esc(intro.p) + '</p>' : '') + input + voice +
-      '<div id="draft-out"' + (d.tasks.length || d.busy ? '' : ' hidden') + '>' + (d.busy ? '<div class="ai-card"><div class="skel"><i></i><i></i><i></i></div></div>' :
-        proj + '<div class="sec-h"><span>Vorschläge – zum Übernehmen anhaken</span></div><div class="group" id="draft-list">' + draftList(d.tasks) + '</div>' +
-        '<button type="button" class="btn-p block" id="draft-go" data-action="draft-go">Anlegen</button>') + '</div>');
+    return wrapForm('draft-form', '', head(intro.t, '', 'Schließen') + (intro.p ? '<p class="meta-line" style="margin-top:12px">' + esc(intro.p) + '</p>' : '') + input + mailIn + voice +
+      '<div id="draft-out"' + (d.tasks.length || d.busy || d.mailSum ? '' : ' hidden') + '>' + (d.busy ? '<div class="ai-card"><div class="skel"><i></i><i></i><i></i></div></div>' :
+        mailSumHtml(d) + proj + (d.tasks.length || kind !== 'mail' ? '<div class="sec-h"><span>Vorschläge – zum Übernehmen anhaken</span></div><div class="group" id="draft-list">' + draftList(d.tasks) + '</div>' +
+        '<button type="button" class="btn-p block" id="draft-go" data-action="draft-go">Anlegen</button>' : '')) + '</div>');
   }
   function openDraft(kind, d) { S.draft = Object.assign({ kind: kind, tasks: [] }, d || {}); openSheet('draft', kind); renderDraft(); }
   function redrawDraft() {
@@ -2673,11 +3034,20 @@
     renderDraft();
   }
   function draftAi(btn, action) {
-    var inp = $('draft-in'), text = inp ? inp.value.trim() : '';
-    if (!text) { toast('Schreib zuerst etwas hinein.'); if (inp) inp.focus(); return; }
-    S.draft.input = text; S.draft.busy = true; S.draft.tasks = []; S.draft.project = null; redrawDraft();
-    aiCall(action, { text: text }).then(function (r) {
+    var inp = $('draft-in'), text = inp ? inp.value.trim() : '', batch = action === 'mail' && S.draft.mails;
+    if (!text && !batch) { toast('Schreib zuerst etwas hinein.'); if (inp) inp.focus(); return; }
+    S.draft.input = text; S.draft.busy = true; S.draft.tasks = []; S.draft.project = null; S.draft.mailSum = null; redrawDraft();
+    aiCall(action, action === 'mail' ? { mails: batch ? S.draft.mails : [{ text: text.slice(0, 12000) }] } : { text: text }).then(function (r) {
       S.draft.busy = false;
+      if (action === 'mail') {
+        S.draft.mailSum = { summary: String(r.summary || '').slice(0, 1200), reply_needed: !!r.reply_needed, reply_due: okDate(r.reply_due), reply_hint: r.reply_hint ? String(r.reply_hint).slice(0, 300) : '',
+          mails: (Array.isArray(r.mails) ? r.mails : []).filter(function (x) { return x && Number.isInteger(x.i) && S.draft.mails && S.draft.mails[x.i]; }).slice(0, 12).map(function (x) { return { i: x.i, summary: String(x.summary || '').slice(0, 300), important: !!x.important }; }) };
+        S.draft.tasks = (Array.isArray(r.tasks) ? r.tasks : []).slice(0, 15).map(function (x) { return cleanTask(x); }).filter(Boolean);
+        if (S.draft.link) S.draft.tasks.forEach(function (t) { t.notes = ((t.notes ? t.notes + '\n\n' : '') + 'In Gmail öffnen: ' + S.draft.link).slice(0, 5000); });
+        if (!S.draft.tasks.length) toast('Keine Aufgaben nötig – nur zur Info.');
+        redrawDraft();
+        return;
+      }
       if (action === 'project') {
         S.draft.project = { name: String(r.name || text).slice(0, 80), due: okDate(r.due), color: colorOf(r.color) };
         S.draft.tasks = (Array.isArray(r.tasks) ? r.tasks : []).slice(0, 20).map(function (x) { var t = cleanTask(x); if (t) t.project_id = null; return t; }).filter(Boolean);
@@ -3047,12 +3417,12 @@
     document.body.classList.remove('plain');
     if (firstShow) applySide();
     renderChrome();
-    var active = document.activeElement, keepId = active && (active.id === 'f-search' || active.id === 'q-title') ? active.id : '', caret = keepId ? active.selectionStart : 0;
+    var active = document.activeElement, keepId = active && (active.id === 'f-search' || active.id === 'q-title' || active.id === 'note-q') ? active.id : '', caret = keepId ? active.selectionStart : 0;
     var qv = $('q-title') ? $('q-title').value : '';
     var v = $('view'), count = S.animNext || S.countNext;
     v.classList.toggle('anim', S.animNext); S.animNext = false; S.countNext = false;
     if (S.swap) { S.swap = false; v.classList.remove('swap'); void v.offsetWidth; v.classList.add('swap'); }
-    v.innerHTML = S.tab === 'board' ? viewBoard() : S.tab === 'kalender' ? viewKalender() : S.tab === 'projekte' ? viewProjekte() : S.tab === 'team' ? viewTeam() : S.tab === 'berichte' ? viewBerichte() : viewHeute();
+    v.innerHTML = S.tab === 'board' ? viewBoard() : S.tab === 'kalender' ? viewKalender() : S.tab === 'projekte' ? viewProjekte() : S.tab === 'notizen' ? viewNotizen() : S.tab === 'team' ? viewTeam() : S.tab === 'berichte' ? viewBerichte() : viewHeute();
     if ($('q-title')) { $('q-title').value = qv; quickHint(); }
     if (keepId) { var f = $(keepId); if (f) { f.focus(); try { f.setSelectionRange(caret, caret); } catch (e) {} } }
     if (count) countUp();
@@ -3282,6 +3652,8 @@
       '<p class="meta-line">Die KI (Google Gemini) läuft nur, wenn du auf einen ✦-Knopf klickst. Dabei werden die betroffenen Aufgabentitel an Google geschickt – im Gratis-Tarif kann Google sie zur Verbesserung nutzen. Nichts Vertrauliches eintragen. Höchstens 100 Anfragen pro Person und Tag.</p>' +
       connRows() +
       '<div class="sec-h"><span>Darstellung</span></div>' + segc({ list: THEMES, sel: theme(), action: 'theme', label: 'Design' }) +
+      '<div class="sec-h"><span>Farbe</span></div>' + accentPicker() +
+      '<div class="group" style="margin-top:12px"><button type="button" class="row-btn" data-action="home-edit"><span class="grow">„Heute“ anpassen</span><i class="chev"></i></button></div>' +
       '<div class="group" style="margin-top:12px"><button type="button" class="row-btn" data-action="toggle-notify"><span class="grow">Benachrichtigungen</span><span class="muted" id="notify-state">' + (notifyOn() ? 'An' : 'Aus') + '</span></button></div>' +
       '<div class="sec-h"><span>Sicherung</span></div><div class="group">' +
       '<button type="button" class="row-btn accent" data-action="backup-now"><span class="grow">' + I.cloud + ' Jetzt in Supabase sichern</span></button>' +
@@ -3314,7 +3686,7 @@
     ctxClose(); closePalette();
     var html = kind === 'task' ? taskSheet(id) : kind === 'project' ? projectSheet(id) : kind === 'inbox' ? inboxSheet() : kind === 'trash' ? trashSheet()
       : kind === 'update' ? wrapForm('upd-form', '', updateInner()) : kind === 'whatsnew' ? whatsNewSheet() : kind === 'keys' ? keysSheet() : kind === 'chat' ? chatSheet() : kind === 'draft' ? draftSheet(id) :
-      kind === 'tpl' ? tplSheet(id) : kind === 'tpl-apply' ? tplApplySheet(id) : kind === 'cal' ? calSheet() : kind === 'mail' ? mailSheet() : kind === 'music' ? musicSheet() : settingsSheet();
+      kind === 'tpl' ? tplSheet(id) : kind === 'tpl-apply' ? tplApplySheet(id) : kind === 'cal' ? calSheet() : kind === 'mail' ? mailSheet() : kind === 'music' ? musicSheet() : kind === 'note' ? noteSheet(id) : kind === 'shutdown' ? shutdownSheet() : kind === 'home' ? homeSheet() : settingsSheet();
     if (!html) return;
     clearTimeout(S.closeTimer);
     S.armed = null; S.aiSubs = []; S.sheet = { kind: kind, id: id || '', updKey: kind === 'update' ? updKey() : '' }; S.last = document.activeElement; S.draftSubs = [];
@@ -3335,6 +3707,7 @@
   }
   function closeSheet() {
     if (!S.sheet) return;
+    if (S.sheet.kind === 'note' && noteT) noteSave();
     if (S.rec) { try { S.rec.rec.onstop = null; S.rec.rec.stop(); S.rec.stream.getTracks().forEach(function (t) { t.stop(); }); } catch (e) {} clearInterval(S.rec.timer); S.rec = null; }
     S.sheet = null; S.armed = null;
     var el = $('sheet');
@@ -3574,6 +3947,7 @@
       case 'logout': closeSheet(); unsubscribe(); jset(LS_SP, null); jset(LS_GM, null); SP.now = null; GM.list = null; CAL.ws = null; S.sb.auth.signOut(); break;
       case 'retry': start(); break;
       case 'theme': switchTheme(el.dataset.seg); break;
+      case 'accent': ls(LS_ACCENT, el.dataset.k === 'blue' ? null : el.dataset.k); applyTheme(); Array.prototype.forEach.call(document.querySelectorAll('.acc'), function (b) { b.setAttribute('aria-checked', b.dataset.k === accent() ? 'true' : 'false'); }); break;
       case 'side-toggle': toggleSide(); break;
       case 'chat': openSheet('chat'); break;
       case 'chat-send': var cq = $('chat-q'); if (cq) { chatSend(cq.value); cq.value = ''; autoGrow(cq); $('chat-send').disabled = true; } break;
@@ -3590,6 +3964,10 @@
       case 'ai-extract': openDraft('extract'); break;
       case 'ai-project': openDraft('project'); break;
       case 'draft-find': draftAi(el, 'extract'); break;
+      case 'draft-mail': draftAi(el, 'mail'); break;
+      case 'ai-mail': openDraft('mail'); break;
+      case 'mail-ai': mailAi(id); break;
+      case 'mail-ai-all': mailAiAll(); break;
       case 'draft-plan': draftAi(el, 'project'); break;
       case 'draft-toggle': var dt = S.draft && S.draft.tasks[Number(el.dataset.i)]; if (dt) { dt.on = !dt.on; renderDraft(); } break;
       case 'draft-go': draftGo(el); break;
@@ -3639,6 +4017,22 @@
       case 'do-update': doUpdate(el); break;
       case 'upd-later': updLater(); break;
       case 'cal-sheet': openSheet('cal'); break;
+      case 'note-new': S.noteNew = null; openSheet('note'); break;
+      case 'note-open': openSheet('note', id); break;
+      case 'note-filter': S.noteF = el.dataset.seg; setTimeout(render, 160); break;
+      case 'note-share': noteSet('shared', el.dataset.seg === 'team'); break;
+      case 'note-pin': var nf = noteForm(), nn = nf && (nf.dataset.id ? byId(S.notes, nf.dataset.id) : S.noteNew); noteSet('pinned', !(nn && nn.pinned)); break;
+      case 'note-color': noteSet('color', el.dataset.c); break;
+      case 'note-ai': noteAi(); break;
+      case 'note-del': noteDel(); break;
+      case 'go-notes': goTab('notizen'); break;
+      case 'shutdown': openSheet('shutdown'); break;
+      case 'shutdown-go': shutdownGo(el); break;
+      case 'home-edit': openSheet('home'); break;
+      case 'home-toggle': homeChange(function (c) { var k = el.dataset.k, i = c.off.indexOf(k); if (i >= 0) c.off.splice(i, 1); else c.off.push(k); }); break;
+      case 'home-up': case 'home-down': homeChange(function (c) { var i = c.order.indexOf(el.dataset.k), j = i + (a === 'home-up' ? -1 : 1); if (i >= 0 && j >= 0 && j < c.order.length) { var x = c.order[i]; c.order[i] = c.order[j]; c.order[j] = x; } }); break;
+      case 'home-reset': homeChange(function (c) { c.order = HOME.map(function (h) { return h.k; }); c.off = []; }); break;
+      case 'overdue-today': overdueToday(String(el.dataset.ids || '').split(',').filter(Boolean)); break;
       case 'cal-create': calCreate(); break;
       case 'cal-reset': calReset(); break;
       case 'cal-scope': calScope(el.dataset.seg); break;
@@ -3709,6 +4103,8 @@
     else if (e.target.id === 'q-title') quickHint();
     else if (e.target.id === 'pal-q') { if (S.pal) S.pal.i = 0; palRender(); }
     else if (e.target.id === 'c-new') { $('c-send').disabled = !e.target.value.trim(); autoGrow(e.target); }
+    else if (e.target.id === 'n-title' || e.target.id === 'n-body') noteQueue();
+    else if (e.target.id === 'note-q') { S.noteQ = e.target.value; render(); }
     else if (e.target.id === 'chat-q') { $('chat-send').disabled = !e.target.value.trim(); autoGrow(e.target); }
     else if (e.target.classList && e.target.classList.contains('draft-t') && S.draft) { var dt = S.draft.tasks[Number(e.target.dataset.i)]; if (dt) dt.title = e.target.value.slice(0, 200); }
   });
@@ -3723,6 +4119,7 @@
     else if (id === 't-due') { var c = $('clear-due'); if (c) c.hidden = !e.target.value; }
     else if (id === 't-remind') { var cr = $('clear-remind'); if (cr) cr.hidden = !e.target.value; }
     else if (id === 'att-input') { uploadFiles(e.target.files); e.target.value = ''; }
+    else if (id === 'mail-file') { readMailFile(e.target.files && e.target.files[0]); e.target.value = ''; }
     else if (id === 'import-file') { importCsv(e.target.files && e.target.files[0]); e.target.value = ''; }
     else if (id === 'p-due') { var c2 = $('clear-pdue'); if (c2) c2.hidden = !e.target.value; }
   });
@@ -3753,7 +4150,7 @@
       if (e.key === 'n' || e.key === 'N') { e.preventDefault(); openSheet('task'); return; }
       if (e.key === '?') { e.preventDefault(); openSheet('keys'); return; }
       if ((e.key === 'j' || e.key === 'J') && aiOn()) { e.preventDefault(); openSheet('chat'); return; }
-      if (/^[1-6]$/.test(e.key)) { goTab(TABS[Number(e.key) - 1]); return; }
+      if (/^[1-7]$/.test(e.key)) { goTab(TABS[Number(e.key) - 1]); return; }
       if (e.key === '/') { var qi = $('q-title') || $('f-search'); if (qi) { e.preventDefault(); qi.focus(); } return; }
     }
     if (e.key === 'Enter' && e.target.id === 'sub-new') { e.preventDefault(); addSub(e.target); return; }
