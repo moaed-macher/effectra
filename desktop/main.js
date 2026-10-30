@@ -1,7 +1,7 @@
 // Effectra Desktop: zeigt die Web-App in einem eigenen, randlosen Fenster.
 // Die App selbst kommt live von Netlify – neue Versionen sind also sofort da,
 // ohne neue exe. Nur das Fenster-Programm selbst aktualisiert sich über GitHub.
-const { app, BrowserWindow, shell, Menu, Notification, ipcMain, nativeTheme, net } = require("electron");
+const { app, BrowserWindow, shell, Menu, Notification, ipcMain, nativeTheme, net, Tray, nativeImage, globalShortcut } = require("electron");
 const path = require("path");
 const fs = require("fs");
 
@@ -15,6 +15,10 @@ app.setAppUserModelId("app.effectra.desktop"); // nötig für Windows-Benachrich
 if (!app.requestSingleInstanceLock()) app.quit();
 
 let win = null;
+let tray = null;
+let quitting = false;
+let hintShown = false;
+const HIDDEN_START = process.argv.includes("--hidden");
 let offlineTimer = null;
 let update = { state: "idle" }; // letzter Update-Stand, damit die App ihn nach einem Neuladen kennt
 
@@ -22,7 +26,42 @@ const stateFile = () => path.join(app.getPath("userData"), "fenster.json");
 function loadState() { try { return JSON.parse(fs.readFileSync(stateFile(), "utf8")); } catch (e) { return {}; } }
 function saveState() {
   if (!win || win.isDestroyed()) return;
-  try { fs.writeFileSync(stateFile(), JSON.stringify({ ...win.getNormalBounds(), max: win.isMaximized() })); } catch (e) {}
+  const old = loadState();
+  try { fs.writeFileSync(stateFile(), JSON.stringify({ ...old, ...win.getNormalBounds(), max: win.isMaximized() })); } catch (e) {}
+}
+function setFlag(k, v) { const st = loadState(); st[k] = v; try { fs.writeFileSync(stateFile(), JSON.stringify(st)); } catch (e) {} }
+
+function showWin() {
+  if (!win || win.isDestroyed()) { createWindow(true); return; }
+  if (win.isMinimized()) win.restore();
+  win.show(); win.focus();
+}
+// Schnell eine Aufgabe anlegen – von überall (Strg+Leertaste)
+function quickAdd() { showWin(); setTimeout(() => { if (win && !win.isDestroyed()) win.webContents.send("desk:quick"); }, 120); }
+
+function autostart() { try { return app.getLoginItemSettings({ args: ["--hidden"] }).openAtLogin; } catch (e) { return false; } }
+function setAutostart(on) {
+  try { app.setLoginItemSettings({ openAtLogin: !!on, args: ["--hidden"] }); } catch (e) {}
+  buildTray();
+  return autostart();
+}
+function buildTray() {
+  if (!tray) return;
+  tray.setContextMenu(Menu.buildFromTemplate([
+    { label: "Effectra öffnen", click: showWin },
+    { label: "Neue Aufgabe", accelerator: "CommandOrControl+Space", click: quickAdd },
+    { type: "separator" },
+    { label: "Mit Windows starten", type: "checkbox", checked: autostart(), click: (m) => setAutostart(m.checked) },
+    { type: "separator" },
+    { label: "Beenden", click: () => { quitting = true; app.quit(); } }
+  ]));
+}
+function setupTray() {
+  const img = nativeImage.createFromPath(path.join(__dirname, "assets", "icon.png")).resize({ width: 16, height: 16 });
+  tray = new Tray(img);
+  tray.setToolTip("Effectra");
+  tray.on("click", showWin);
+  buildTray();
 }
 
 function overlayColors(dark) {
@@ -48,7 +87,7 @@ function showOffline() {
   }, 5000);
 }
 
-function createWindow() {
+function createWindow(forceShow) {
   const s = loadState();
   const dark = nativeTheme.shouldUseDarkColors;
   win = new BrowserWindow({
@@ -68,8 +107,18 @@ function createWindow() {
     }
   });
   if (s.max) win.maximize();
-  win.once("ready-to-show", () => win.show());
-  win.on("close", saveState);
+  win.once("ready-to-show", () => { if (!HIDDEN_START || forceShow) win.show(); });
+  // Schließen = in die Taskleiste (unten rechts), damit Erinnerungen weiterlaufen
+  win.on("close", (e) => {
+    saveState();
+    if (quitting || !tray) return;
+    e.preventDefault();
+    win.hide();
+    if (!hintShown && !loadState().trayHint && Notification.isSupported()) {
+      hintShown = true; setFlag("trayHint", true);
+      new Notification({ title: "Effectra läuft weiter", body: "Unten rechts in der Taskleiste. Rechtsklick → Beenden schließt ganz." }).show();
+    }
+  });
   win.loadURL(APP_URL);
 
   win.webContents.on("did-fail-load", (e, code, desc, url, isMainFrame) => {
@@ -87,8 +136,12 @@ function createWindow() {
     e.preventDefault();
     if (/^https:\/\//.test(url)) shell.openExternal(url);
   });
-  // Nur Benachrichtigungen erlauben, sonst keine Geräte-Rechte
-  win.webContents.session.setPermissionRequestHandler((wc, perm, cb) => cb(perm === "notifications"));
+  // Nur Benachrichtigungen und das Mikrofon (zum Diktieren) erlauben – keine Kamera, kein Standort
+  win.webContents.session.setPermissionRequestHandler((wc, perm, cb, details) => {
+    if (perm === "notifications") return cb(true);
+    if (perm === "media") return cb((details.mediaTypes || []).length > 0 && details.mediaTypes.every((t) => t === "audio"));
+    cb(false);
+  });
 }
 
 function send(state) {
@@ -127,7 +180,7 @@ function setupUpdates() {
 
 ipcMain.handle("desk:info", (e) => {
   if (!trusted(e)) return null;
-  return { version: app.getVersion(), packaged: app.isPackaged, update };
+  return { version: app.getVersion(), packaged: app.isPackaged, update, autostart: autostart() };
 });
 ipcMain.handle("desk:check", (e) => {
   if (!trusted(e)) return null;
@@ -138,6 +191,7 @@ ipcMain.handle("desk:check", (e) => {
 ipcMain.on("desk:install", (e) => {
   if (!trusted(e) || !autoUpdater || update.state !== "ready") return;
   saveState();
+  quitting = true;
   setImmediate(() => autoUpdater.quitAndInstall(true, true));
 });
 ipcMain.on("desk:theme", (e, dark) => {
@@ -145,12 +199,19 @@ ipcMain.on("desk:theme", (e, dark) => {
   try { win.setTitleBarOverlay({ ...overlayColors(!!dark), height: OVERLAY_H }); } catch (err) {}
   win.setBackgroundColor(dark ? "#000000" : "#F2F2F7");
 });
+ipcMain.handle("desk:autostart", (e, on) => (trusted(e) ? setAutostart(!!on) : null));
 ipcMain.on("desk:retry", (e) => { if (trusted(e) && win && !win.isDestroyed()) win.loadURL(APP_URL); });
 
-app.on("second-instance", () => { if (win) { if (win.isMinimized()) win.restore(); win.focus(); } });
+app.on("second-instance", () => showWin());
+app.on("before-quit", () => { quitting = true; });
+app.on("will-quit", () => { try { globalShortcut.unregisterAll(); } catch (e) {} });
 Menu.setApplicationMenu(null);
 app.whenReady().then(() => {
   createWindow();
+  setupTray();
+  if (!globalShortcut.register("CommandOrControl+Space", quickAdd)) globalShortcut.register("CommandOrControl+Shift+Space", quickAdd);
+  // Beim allerersten Start: mit Windows starten (lässt sich im Menü und in den Einstellungen abschalten)
+  if (app.isPackaged && !loadState().autoInit) { setFlag("autoInit", true); setAutostart(true); }
   setupUpdates();
 });
-app.on("window-all-closed", () => app.quit());
+app.on("window-all-closed", () => { if (quitting || !tray) app.quit(); });

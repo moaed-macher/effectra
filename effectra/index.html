@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self' https://*.supabase.co wss://*.supabase.co; font-src 'self'; manifest-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self' https://*.supabase.co wss://*.supabase.co; font-src 'self'; manifest-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'">
 <meta name="referrer" content="strict-origin-when-cross-origin">
 <title>Effectra</title>
 <meta name="description" content="Effectra – Projekte, Aufgaben und Fortschritt fürs Team.">
@@ -17,17 +17,20 @@
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="Effectra">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
-<link rel="stylesheet" href="styles.css?v=2.0.0">
+<link rel="stylesheet" href="styles.css?v=3.0.0">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.110.1/dist/umd/supabase.js" defer></script>
-<script src="config.js?v=2.0.0" defer></script>
-<script src="app.js?v=2.0.0" defer></script>
+<script src="config.js?v=3.0.0" defer></script>
+<script src="app.js?v=3.0.0" defer></script>
 </head>
 <body class="plain">
+  <div class="progress" id="progress" aria-hidden="true"><i></i></div>
   <div class="drag-bar" aria-hidden="true"></div>
   <div id="screen" class="shell">
-    <div class="boot" aria-label="Effectra wird geladen">
-      <img src="icons/icon-192.png" alt="" width="64" height="64">
+    <div class="boot" role="progressbar" aria-label="Effectra wird geladen">
+      <div class="boot-logo"><span class="boot-halo"></span><img src="icons/icon-192.png" alt="" width="76" height="76"></div>
+      <b class="boot-name">Effectra</b>
       <div class="boot-bar"><i></i></div>
+      <span class="boot-t">Wird gestartet …</span>
     </div>
   </div>
 
@@ -99,6 +102,9 @@
         <button class="icon-btn m-only" type="button" data-action="palette" aria-label="Suchen">
           <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.5"/><path d="M20 20l-4.6-4.6"/></svg>
         </button>
+        <button class="ai-top" id="ai-top" type="button" data-action="chat" aria-label="Frag Effectra (KI)" title="Frag Effectra (J)">
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor" aria-hidden="true"><path d="M12 2.5l1.9 5.6 5.6 1.9-5.6 1.9L12 17.5l-1.9-5.6L4.5 10l5.6-1.9zM19 15l.9 2.1 2.1.9-2.1.9L19 21l-.9-2.1-2.1-.9 2.1-.9z"/></svg><span>Frag Effectra</span>
+        </button>
         <button class="icon-btn bell" id="bell" type="button" data-action="inbox" aria-label="Mitteilungen">
           <svg viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9a6 6 0 1 1 12 0c0 6 2.5 7.5 2.5 7.5h-17S6 15 6 9z"/><path d="M10 20a2.2 2.2 0 0 0 4 0"/></svg>
           <span class="bell-n" id="bell-n" hidden></span>
@@ -118,6 +124,7 @@
   <div class="sheet-wrap" id="sheet" hidden></div>
   <div class="pal-wrap" id="palette" hidden></div>
   <div class="ctx" id="ctx" hidden role="menu"></div>
+  <input type="file" id="import-file" accept=".csv,text/csv,text/plain" hidden>
   <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
 </body>
 </html>
