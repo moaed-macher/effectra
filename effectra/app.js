@@ -4,9 +4,11 @@
 
   /* ================= Konstanten ================= */
   // Bei jeder Veröffentlichung erhöhen – gleich wie in version.json und den ?v= in index.html
-  var APP_VERSION = '3.2.1';
+  var APP_VERSION = '3.3.0';
   var CHANGES = [
-    'Spotify ist eingerichtet: Einstellungen → Verbindungen → Spotify → Verbinden.'
+    'Spotify links in der Seitenleiste: Lieblingssongs, Playlists und Suche – mit einem Klick abspielen. Die Höhe kannst du unten ziehen.',
+    'Ohne offenes Spotify: Im Browser spielt Effectra selbst, im Windows-Programm startet Spotify automatisch.',
+    'Fokus-Modus: ruhige Vollbild-Ansicht, Windows-Benachrichtigungen stumm, am Ende mehrere kurze Töne.'
   ];
   var DESK = window.effectraDesktop || null; // nur in der Windows-App vorhanden
   if (DESK) document.documentElement.classList.add('desk');
@@ -266,7 +268,8 @@
     if (!left) {
       S.focusEnd = 0; ls(LS_FOCUS, null);
       if (pill) pill.hidden = true;
-      toast('Fokuszeit vorbei – gönn dir eine kurze Pause!');
+      deskQuiet(false); focusView(); alarmStart();
+      setTimeout(function () { notify('Fokuszeit vorbei', 'Gönn dir eine kurze Pause!'); }, 1500);
       celebrate(window.innerWidth / 2, window.innerHeight / 3);
       queue();
     }
@@ -1090,7 +1093,8 @@
   window.addEventListener('storage', function (e) { if (e.key === LS_RES && e.newValue) oauthResult(jget(LS_RES)); });
   function connInit() {
     var r = jget(LS_RES); if (r) oauthResult(r);
-    spPrep(); spPoll(true); gmLoad(false);
+    spPrep(); spPoll(true); gmLoad(false); mdUI();
+    if (mdState().open && spAuth()) mdLoad(MD.tab === 'lists' ? 'lists' : 'liked');
   }
   function refreshConn() {
     var sp = $('conn-sp'), gm = $('conn-gm');
@@ -1124,7 +1128,7 @@
     var p = SP.pkce; SP.pkce = null;
     oauthOpen('spotify', 'https://accounts.spotify.com/authorize?response_type=code&client_id=' + encodeURIComponent(CONF.spotifyClientId) +
       '&redirect_uri=' + encodeURIComponent(REDIRECT) + '&code_challenge_method=S256&code_challenge=' + p.ch +
-      '&scope=' + encodeURIComponent('user-read-currently-playing user-read-playback-state user-modify-playback-state'), { verifier: p.ver });
+      '&scope=' + encodeURIComponent(SP_SCOPES), { verifier: p.ver });
     spPrep();
   }
   function spTokenReq(params) {
@@ -1135,8 +1139,9 @@
     busy(1);
     spTokenReq({ grant_type: 'authorization_code', code: code, redirect_uri: REDIRECT, client_id: CONF.spotifyClientId, code_verifier: ver || '' }).then(function (j) {
       busy(-1);
-      jset(LS_SP, { at: j.access_token, rt: j.refresh_token || '', exp: Date.now() + (Number(j.expires_in) || 3600) * 1000 });
-      toast('Spotify verbunden'); spPoll(true); refreshConn();
+      jset(LS_SP, { at: j.access_token, rt: j.refresh_token || '', exp: Date.now() + (Number(j.expires_in) || 3600) * 1000, scope: String(j.scope || '') });
+      MD.liked = MD.lists = MD.res = null;
+      toast('Spotify verbunden'); spPoll(true); refreshConn(); mdUI(); if (mdState().open || (S.sheet && S.sheet.kind === 'music')) mdLoad(MD.tab === 'lists' ? 'lists' : 'liked');
     }, function () { busy(-1); toast('Spotify-Verbindung fehlgeschlagen. Ist dein Konto in der Spotify-App freigeschaltet?'); });
   }
   var spRefreshing = null;
@@ -1148,7 +1153,7 @@
     if (!spRefreshing) {
       spRefreshing = spTokenReq({ grant_type: 'refresh_token', refresh_token: a.rt, client_id: CONF.spotifyClientId }).then(function (j) {
         spRefreshing = null;
-        jset(LS_SP, { at: j.access_token, rt: j.refresh_token || a.rt, exp: Date.now() + (Number(j.expires_in) || 3600) * 1000 });
+        jset(LS_SP, { at: j.access_token, rt: j.refresh_token || a.rt, exp: Date.now() + (Number(j.expires_in) || 3600) * 1000, scope: String(j.scope || a.scope || '') });
         return j.access_token;
       }, function (e) {
         spRefreshing = null;
@@ -1176,10 +1181,12 @@
       return r.json();
     }).then(function (j) {
       var it = j && j.item;
+      var big = ((it && it.album && it.album.images) || [])[1] || ((it && it.album && it.album.images) || [])[0];
       SP.now = it ? { title: String(it.name || ''), artist: (it.artists || []).map(function (x) { return x.name; }).join(', ') || (it.show && it.show.name) || '', img: spImg(it),
-        playing: !!j.is_playing, url: it.external_urls && it.external_urls.spotify || '' } : null;
-      SP.err = ''; musicUI();
-    }, function (e) { SP.err = e && e.message === 'off' ? '' : 'x'; musicUI(); });
+        big: big && /^https:\/\/[a-z0-9.-]+\.(scdn\.co|spotifycdn\.com)\//i.test(big.url) ? big.url : '', playing: !!j.is_playing, url: it.external_urls && it.external_urls.spotify || '',
+        pos: Number(j.progress_ms) || 0, dur: Number(it.duration_ms) || 0, at: Date.now() } : null;
+      SP.err = ''; musicUI(); mdNow();
+    }, function (e) { SP.err = e && e.message === 'off' ? '' : 'x'; musicUI(); mdNow(); });
   }
   setInterval(function () { spPoll(false); }, 15000);
   document.addEventListener('visibilitychange', function () { if (document.visibilityState === 'visible') { spPoll(false); gmLoad(false); } });
@@ -1196,10 +1203,10 @@
   function musicHtml() {
     if (!spAuth()) return '';
     var n = SP.now;
-    if (!n) return '<div class="music idle"><span class="m-art">' + IC.music + '</span><span class="m-t"><b>Spotify</b><span>' + (SP.err ? 'Gerade nicht erreichbar' : 'Gerade läuft nichts') + '</span></span></div>';
+    if (!n) return '<div class="music idle"><span class="m-art">' + IC.music + '</span><button type="button" class="m-t" data-action="md-open"><b>Spotify</b><span>' + (SP.err ? 'Gerade nicht erreichbar' : 'Tippen für Lieblingssongs & Suche') + '</span></button></div>';
     return '<div class="music' + (n.playing ? ' on' : '') + '">' +
       (n.img ? '<img class="m-art" src="' + esc(n.img) + '" alt="" width="40" height="40" referrerpolicy="no-referrer">' : '<span class="m-art">' + IC.music + '</span>') +
-      '<button type="button" class="m-t" data-action="sp-open" title="In Spotify öffnen"><b>' + esc(n.title) + '</b><span>' + esc(n.artist) + '</span></button>' +
+      '<button type="button" class="m-t" data-action="md-open" title="Spotify-Bereich öffnen"><b>' + esc(n.title) + '</b><span>' + esc(n.artist) + '</span></button>' +
       '<span class="m-btns"><button type="button" data-action="sp" data-cmd="prev" aria-label="Vorheriges Lied">' + IC.prev + '</button>' +
       '<button type="button" class="m-main" data-action="sp" data-cmd="' + (n.playing ? 'pause' : 'play') + '" aria-label="' + (n.playing ? 'Pause' : 'Abspielen') + '">' + (n.playing ? IC.pause : IC.play) + '</button>' +
       '<button type="button" data-action="sp" data-cmd="next" aria-label="Nächstes Lied">' + IC.next + '</button></span></div>';
@@ -1409,6 +1416,241 @@
     }, calErr);
   }
 
+  /* ---------- Spotify-Bereich: Lieblingssongs, Playlists, Suche, Abspielen ---------- */
+  // Am PC links in der Seitenleiste (aufklappbar, Höhe ziehbar), am Handy als Blatt.
+  // Ohne laufendes Spotify: im Browser spielt Effectra selbst (Web Playback SDK, Premium),
+  // im Windows-Programm wird die Spotify-App gestartet, am Handy die Spotify-App geöffnet.
+  var SP_SCOPES = 'user-read-currently-playing user-read-playback-state user-modify-playback-state user-library-read playlist-read-private playlist-read-collaborative streaming user-read-email user-read-private';
+  var LS_MD = 'effectra.md', MD = { tab: 'liked', liked: null, lists: null, q: '', res: null, busy: '', sdk: null, sdkId: '', sdkErr: '', qt: 0 };
+  function mdState() { return jget(LS_MD) || {}; }
+  function mdSave(o) { jset(LS_MD, Object.assign(mdState(), o)); }
+  function spHas(sc) { var a = spAuth(); return !!(a && a.scope && (' ' + a.scope + ' ').indexOf(' ' + sc + ' ') >= 0); }
+  function spJson(method, path, body) {
+    return spToken().then(function (tk) {
+      return fetch('https://api.spotify.com/v1' + path, { method: method, headers: Object.assign({ Authorization: 'Bearer ' + tk }, body ? { 'Content-Type': 'application/json' } : {}), body: body ? JSON.stringify(body) : undefined });
+    }).then(function (r) {
+      if (r.status === 401) { var a = spAuth(); if (a) { a.exp = 0; jset(LS_SP, a); } }
+      if (r.status === 204) return { status: 204, data: null };
+      return r.json().catch(function () { return null; }).then(function (j) { return { status: r.status, data: j }; });
+    });
+  }
+  function tImg(t) { var im = (t && t.album && t.album.images) || (t && t.images) || [], s = im[im.length - 1] || im[0]; return s && /^https:\/\/[a-z0-9.-]+\.(scdn\.co|spotifycdn\.com)\//i.test(s.url) ? s.url : ''; }
+  function tRow(t) { return t && t.uri ? { uri: String(t.uri), title: String(t.name || ''), sub: (t.artists || []).map(function (x) { return x.name; }).join(', '), img: tImg(t), ms: t.duration_ms || 0 } : null; }
+  function mdLoad(kind, force) {
+    if (!spAuth() || MD.busy === kind) return;
+    if (!force && ((kind === 'liked' && MD.liked) || (kind === 'lists' && MD.lists))) return;
+    if (!spHas('user-library-read')) { mdUI(); return; }
+    MD.busy = kind; mdUI();
+    var path = kind === 'liked' ? '/me/tracks?limit=50' : '/me/playlists?limit=50';
+    spJson('GET', path).then(function (r) {
+      MD.busy = '';
+      var items = (r.data && r.data.items) || [];
+      if (kind === 'liked') MD.liked = items.map(function (x) { return tRow(x.track); }).filter(Boolean);
+      else MD.lists = items.filter(Boolean).map(function (p) { return { uri: String(p.uri || ''), title: String(p.name || ''), sub: (p.items && p.items.total != null ? p.items.total : p.tracks && p.tracks.total != null ? p.tracks.total : '') + ' Titel', img: tImg(p) }; }).filter(function (p) { return /^spotify:playlist:/.test(p.uri); });
+      mdUI();
+    }, function () { MD.busy = ''; mdUI(); });
+  }
+  function mdSearch(q) {
+    MD.q = q; clearTimeout(MD.qt);
+    if (!q.trim()) { MD.res = null; mdList(); return; }
+    MD.qt = setTimeout(function () {
+      var mine = q;
+      spJson('GET', '/search?type=track&limit=10&q=' + encodeURIComponent(q.trim())).then(function (r) {
+        if (MD.q !== mine) return;
+        MD.res = ((r.data && r.data.tracks && r.data.tracks.items) || []).map(tRow).filter(Boolean); mdList();
+      }, function () {});
+    }, 320);
+  }
+  // Abspielen: erst normal, sonst ein Gerät finden bzw. starten
+  function spPlay(body, deviceId) {
+    return spJson('PUT', '/me/player/play' + (deviceId ? '?device_id=' + encodeURIComponent(deviceId) : ''), body).then(function (r) {
+      if (r.status === 204 || r.status === 200 || r.status === 202) { setTimeout(function () { spPoll(true); }, 700); return; }
+      if (r.status === 403) { toast('Abspielen geht nur mit Spotify Premium.'); return; }
+      if (r.status === 404 && !deviceId) return spDevice().then(function (id) { if (id) return spPlay(body, id); });
+      toast('Spotify hat das gerade nicht angenommen.');
+    }, function () { toast('Spotify ist gerade nicht erreichbar.'); });
+  }
+  function canSdk() { return !DESK && !!(finePtr && finePtr.matches) && !!navigator.requestMediaKeySystemAccess && !/iPhone|iPad|Android/i.test(navigator.userAgent); }
+  function spDevices() { return spJson('GET', '/me/player/devices').then(function (r) { return (r.data && r.data.devices) || []; }, function () { return []; }); }
+  function spDevice() {
+    return spDevices().then(function (list) {
+      var d = list.filter(function (x) { return x.is_active; })[0] || list.filter(function (x) { return x.type === 'Computer'; })[0] || list[0];
+      if (d) return d.id;
+      if (MD.sdkId) return MD.sdkId;
+      if (canSdk() && spHas('streaming')) { toast('Effectra wird zum Spotify-Player …'); return sdkStart(); }
+      if (DESK) {
+        toast('Spotify wird gestartet …');
+        window.open('spotify:');
+        return new Promise(function (res) {
+          var n = 0, iv = setInterval(function () {
+            spDevices().then(function (l) { var x = l.filter(function (y) { return y.type === 'Computer'; })[0] || l[0]; if (x || ++n > 12) { clearInterval(iv); if (!x) toast('Spotify ist nicht installiert oder nicht angemeldet.'); res(x ? x.id : null); } });
+          }, 1500);
+        });
+      }
+      toast('Öffne kurz die Spotify-App, dann nochmal tippen.');
+      location.href = 'spotify:';
+      return null;
+    });
+  }
+  function sdkStart() {
+    if (MD.sdkId) return Promise.resolve(MD.sdkId);
+    return new Promise(function (res) {
+      var done = function (id, err) { if (err) { MD.sdkErr = err; toast(err); } res(id || null); mdUI(); };
+      var make = function () {
+        try {
+          var p = new window.Spotify.Player({ name: 'Effectra', volume: 0.7, getOAuthToken: function (cb) { spToken().then(cb, function () {}); } });
+          p.addListener('ready', function (e) { MD.sdk = p; MD.sdkId = e.device_id; done(e.device_id); });
+          p.addListener('not_ready', function () { MD.sdkId = ''; mdUI(); });
+          p.addListener('initialization_error', function () { done(null, 'Dieser Browser kann Spotify nicht direkt abspielen.'); });
+          p.addListener('authentication_error', function () { done(null, 'Bitte Spotify einmal neu verbinden.'); });
+          p.addListener('account_error', function () { done(null, 'Direkt abspielen geht nur mit Spotify Premium.'); });
+          p.addListener('player_state_changed', function () { spPoll(true); });
+          p.connect();
+        } catch (e) { done(null, 'Spotify-Player konnte nicht starten.'); }
+      };
+      setTimeout(function () { if (!MD.sdkId) done(null, ''); }, 12000);
+      if (window.Spotify && window.Spotify.Player) { make(); return; }
+      window.onSpotifyWebPlaybackSDKReady = make;
+      var sc = document.createElement('script'); sc.src = 'https://sdk.scdn.co/spotify-player.js'; sc.async = true;
+      sc.onerror = function () { done(null, 'Spotify-Player konnte nicht geladen werden.'); };
+      document.head.appendChild(sc);
+    });
+  }
+  function mdPlay(src, i) {
+    if (src === 'liked' && MD.liked && MD.liked[i]) spPlay({ uris: MD.liked.slice(i, i + 50).map(function (t) { return t.uri; }) });
+    else if (src === 'search' && MD.res && MD.res[i]) spPlay({ uris: [MD.res[i].uri] });
+    else if (src === 'lists' && MD.lists && MD.lists[i]) spPlay({ context_uri: MD.lists[i].uri });
+  }
+  function mdRows(list, src) {
+    if (!list) return '<p class="md-empty">' + (MD.busy ? 'Lädt …' : '') + '</p>';
+    if (!list.length) return '<p class="md-empty">' + (src === 'search' ? 'Nichts gefunden' : src === 'lists' ? 'Keine Playlists' : 'Noch keine Lieblingssongs') + '</p>';
+    var cur = SP.now && SP.now.title;
+    return list.map(function (t, i) {
+      return '<button type="button" class="md-row' + (cur && t.title === cur ? ' on' : '') + '" data-action="md-play" data-src="' + src + '" data-i="' + i + '">' +
+        (t.img ? '<img src="' + esc(t.img) + '" alt="" width="34" height="34" loading="lazy" referrerpolicy="no-referrer">' : '<span class="md-ph">' + IC.music + '</span>') +
+        '<span class="md-tx"><b>' + esc(t.title) + '</b><span>' + esc(t.sub) + '</span></span></button>';
+    }).join('');
+  }
+  function mdNowHtml() {
+    var n = SP.now;
+    if (!n) return '<div class="md-now idle"><span class="md-cover">' + IC.music + '</span><span class="md-tx"><b>Gerade läuft nichts</b><span>Wähle unten einen Song</span></span></div>';
+    var pct = n.dur ? Math.min(100, Math.round(spPos() / n.dur * 100)) : 0;
+    return '<div class="md-now">' + (n.img ? '<img class="md-cover" src="' + esc(n.big || n.img) + '" alt="" width="52" height="52" referrerpolicy="no-referrer">' : '<span class="md-cover">' + IC.music + '</span>') +
+      '<span class="md-tx"><b>' + esc(n.title) + '</b><span>' + esc(n.artist) + '</span></span>' +
+      (n.url ? '<button type="button" class="md-ic" data-action="sp-open" title="In Spotify öffnen" aria-label="In Spotify öffnen"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 4h6v6M20 4l-9 9M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5"/></svg></button>' : '') + '</div>' +
+      '<div class="md-bar"><i data-md-prog style="width:' + pct + '%"></i></div>' +
+      '<div class="md-ctl"><button type="button" data-action="sp" data-cmd="prev" aria-label="Vorheriges Lied">' + IC.prev + '</button>' +
+      '<button type="button" class="m-main" data-action="sp" data-cmd="' + (n.playing ? 'pause' : 'play') + '" aria-label="' + (n.playing ? 'Pause' : 'Abspielen') + '">' + (n.playing ? IC.pause : IC.play) + '</button>' +
+      '<button type="button" data-action="sp" data-cmd="next" aria-label="Nächstes Lied">' + IC.next + '</button></div>';
+  }
+  function mdInner() {
+    if (!spAuth()) return '<div class="md-pad"><p class="md-empty">Spotify ist noch nicht verbunden.</p><button type="button" class="btn-p block" data-action="sp-connect">Spotify verbinden</button></div>';
+    var need = !spHas('user-library-read');
+    return '<div class="md-nowbox" data-md="now">' + mdNowHtml() + '</div>' +
+      (need ? '<div class="md-pad"><p class="md-empty">Für Lieblingssongs, Playlists und Suche einmal neu verbinden.</p><button type="button" class="btn-t block" data-action="sp-connect">Neu verbinden</button></div>' :
+      segc({ list: [{ k: 'liked', l: 'Lieblings' }, { k: 'lists', l: 'Playlists' }, { k: 'search', l: 'Suche' }], sel: MD.tab, action: 'md-tab', cls: 'md-seg', label: 'Spotify-Bereich' }) +
+      '<div class="md-search"' + (MD.tab === 'search' ? '' : ' hidden') + '><input class="md-q" type="search" placeholder="Song oder Künstler suchen" aria-label="Spotify durchsuchen" value="' + esc(MD.q) + '" autocomplete="off"></div>' +
+      '<div class="md-list" data-md="list">' + mdListHtml() + '</div>') +
+      (MD.sdkId ? '<p class="md-foot">' + IC.music + ' Spielt in Effectra</p>' : '');
+  }
+  function mdListHtml() { return MD.tab === 'liked' ? mdRows(MD.liked, 'liked') : MD.tab === 'lists' ? mdRows(MD.lists, 'lists') : (MD.q.trim() ? mdRows(MD.res, 'search') : '<p class="md-empty">Tippe oben, um zu suchen.</p>'); }
+  function mdRoots() { return document.querySelectorAll('.md-root'); }
+  function mdUI() {
+    var dock = $('music-dock'), open = !!mdState().open && !!spAuth();
+    if (dock) { dock.hidden = !open; var h = mdState().h; if (h) dock.style.height = h + 'px'; }
+    var btn = $('side-spot'); if (btn) { btn.hidden = !spAuth() && !spOn(); btn.setAttribute('aria-expanded', open ? 'true' : 'false'); }
+    Array.prototype.forEach.call(mdRoots(), function (r) {
+      if (r.closest('[hidden]')) return;
+      var q = r.querySelector('.md-q'), keep = q && document.activeElement === q, pos = keep ? q.selectionStart : 0, lst = r.querySelector('[data-md="list"]'), st = lst ? lst.scrollTop : 0;
+      r.innerHTML = mdInner();
+      if (keep) { var nq = r.querySelector('.md-q'); if (nq) { nq.focus(); try { nq.setSelectionRange(pos, pos); } catch (e) {} } }
+      var nl = r.querySelector('[data-md="list"]'); if (nl) nl.scrollTop = st;
+    });
+  }
+  function mdList() { Array.prototype.forEach.call(mdRoots(), function (r) { var l = r.querySelector('[data-md="list"]'); if (l) l.innerHTML = mdListHtml(); }); }
+  function mdNow() { Array.prototype.forEach.call(mdRoots(), function (r) { var b = r.querySelector('[data-md="now"]'); if (b) b.innerHTML = mdNowHtml(); var l = r.querySelector('[data-md="list"]'); if (l && SP.now) Array.prototype.forEach.call(l.querySelectorAll('.md-row'), function (x) { x.classList.toggle('on', x.querySelector('b').textContent === SP.now.title); }); }); }
+  function spPos() { var n = SP.now; if (!n) return 0; return Math.min(n.dur || 0, (n.pos || 0) + (n.playing ? Date.now() - (n.at || Date.now()) : 0)); }
+  setInterval(function () {
+    if (!SP.now || !SP.now.playing) return;
+    var p = SP.now.dur ? Math.min(100, spPos() / SP.now.dur * 100) : 0;
+    Array.prototype.forEach.call(document.querySelectorAll('[data-md-prog]'), function (el) { el.style.width = p.toFixed(1) + '%'; });
+    if (SP.now.dur && spPos() >= SP.now.dur) spPoll(true);
+  }, 1000);
+  function mdToggle() {
+    if (!spAuth()) { spConnect(); return; }
+    if (!(finePtr && finePtr.matches) || window.innerWidth < 760 || $('app').classList.contains('min')) { openSheet('music'); return; }
+    var open = !mdState().open; mdSave({ open: open });
+    if (open) { mdLoad(MD.tab === 'lists' ? 'lists' : 'liked'); spPoll(true); }
+    mdUI();
+  }
+  function musicSheet() { return wrapForm('music-form', '', head('Spotify', '', 'Fertig') + '<div class="md-root md-sheet">' + mdInner() + '</div>'); }
+  // Höhe des Bereichs ziehen
+  document.addEventListener('pointerdown', function (e) {
+    var g = e.target.closest && e.target.closest('.md-grip'); if (!g) return;
+    var dock = $('music-dock'); if (!dock) return;
+    e.preventDefault();
+    var y0 = e.clientY, h0 = dock.getBoundingClientRect().height, max = Math.max(260, window.innerHeight - 220);
+    dock.classList.add('sizing');
+    var mv = function (ev) { dock.style.height = Math.round(Math.max(200, Math.min(max, h0 + ev.clientY - y0))) + 'px'; };
+    var up = function () { document.removeEventListener('pointermove', mv); document.removeEventListener('pointerup', up); dock.classList.remove('sizing'); mdSave({ h: Math.round(dock.getBoundingClientRect().height) }); };
+    document.addEventListener('pointermove', mv); document.addEventListener('pointerup', up);
+  });
+  document.addEventListener('keydown', function (e) {
+    var g = e.target.closest && e.target.closest('.md-grip'); if (!g || (e.key !== 'ArrowUp' && e.key !== 'ArrowDown')) return;
+    e.preventDefault();
+    var dock = $('music-dock'), h = Math.max(200, Math.min(window.innerHeight - 220, dock.getBoundingClientRect().height + (e.key === 'ArrowDown' ? 30 : -30)));
+    dock.style.height = h + 'px'; mdSave({ h: Math.round(h) });
+  });
+  document.addEventListener('input', function (e) { if (e.target.classList && e.target.classList.contains('md-q')) mdSearch(e.target.value); });
+  window.addEventListener('keydown', function (e) {
+    if (alarm.t) alarmStop();
+    var v = $('focus-view');
+    if (e.key === 'Escape' && v && !v.hidden && !S.sheet) { e.preventDefault(); e.stopPropagation(); S.focusHide = true; focusView(); }
+  }, true);
+  document.addEventListener('pointerdown', function (e) { if (alarm.t && !(e.target.closest && e.target.closest('#focus-end'))) alarmStop(); }, true);
+
+  /* ---------- Fokus: Ruhe und Ton am Ende ---------- */
+  var LS_FDND = 'effectra.focus.dnd';
+  function focusDnd() { return ls(LS_FDND) !== '0'; }
+  function deskQuiet(on) { if (DESK && DESK.setFocus && (focusDnd() || !on)) { try { DESK.setFocus(on); } catch (e) {} } }
+  var alarm = { n: 0, t: 0 };
+  function chime() {
+    try {
+      audio = audio || new (window.AudioContext || window.webkitAudioContext)();
+      if (audio.state === 'suspended') audio.resume();
+      var t = audio.currentTime;
+      [880, 1175, 1568].forEach(function (f, i) {
+        var o = audio.createOscillator(), g = audio.createGain();
+        o.type = 'sine'; o.frequency.value = f;
+        g.gain.setValueAtTime(0.0001, t + i * 0.16);
+        g.gain.exponentialRampToValueAtTime(0.16, t + i * 0.16 + 0.02);
+        g.gain.exponentialRampToValueAtTime(0.0001, t + i * 0.16 + 0.5);
+        o.connect(g); g.connect(audio.destination);
+        o.start(t + i * 0.16); o.stop(t + i * 0.16 + 0.55);
+      });
+    } catch (e) {}
+  }
+  // Mehrere kurze Töne, bis man reagiert (höchstens eine Minute)
+  function alarmStart() {
+    alarmStop(); alarm.n = 0; chime();
+    alarm.t = setInterval(function () { if (++alarm.n >= 12) { alarmStop(); return; } chime(); }, 5000);
+    var el = $('focus-end'); if (el) el.hidden = false;
+  }
+  function alarmStop() { if (alarm.t) { clearInterval(alarm.t); alarm.t = 0; } var el = $('focus-end'); if (el) el.hidden = true; }
+  function focusView() {
+    var v = $('focus-view'); if (!v) return;
+    var show = !!S.focusEnd && !S.focusHide && S.screen === 'app';
+    v.hidden = !show;
+    if (!show) return;
+    var task = S.focusTask ? byId(S.tasks, S.focusTask) : null;
+    var h = '<div class="fv-in"><span class="fv-lbl">Fokus</span><span class="fv-time" data-focus-time>' + mmss(focusLeft()) + '</span>' +
+      (task ? '<p class="fv-task">' + esc(task.title) + '</p>' : '<p class="fv-task dim">Nur das Eine. Alles andere kann warten.</p>') +
+      '<div class="fv-music" data-slot="music">' + musicHtml() + '</div>' +
+      '<div class="fv-btns"><button type="button" class="btn-t" data-action="focus-hide">Ausblenden</button><button type="button" class="btn-t danger-t" data-action="focus-stop">Beenden</button></div>' +
+      '<p class="fv-hint">' + (DESK && DESK.setFocus && focusDnd() ? 'Windows-Benachrichtigungen sind stumm.' : 'Effectra-Mitteilungen sind stumm.') + '</p></div>';
+    if (v.innerHTML !== h) v.innerHTML = h;
+  }
+
   /* ================= Schnellsuche (Strg+K) ================= */
   function palItems(q) {
     q = q.trim().toLowerCase();
@@ -1481,13 +1723,13 @@
   }
 
   /* ================= Fokus starten/stoppen ================= */
-  function focusStart(min) { S.focusEnd = Date.now() + min * 60000; ls(LS_FOCUS, String(S.focusEnd)); toast('Fokus läuft: ' + min + ' Minuten'); render(); focusTick(); }
-  function focusStop() { S.focusEnd = 0; ls(LS_FOCUS, null); render(); focusTick(); }
+  function focusStart(min) { alarmStop(); S.focusEnd = Date.now() + min * 60000; S.focusHide = false; ls(LS_FOCUS, String(S.focusEnd)); deskQuiet(true); toast('Fokus läuft: ' + min + ' Minuten'); render(); focusTick(); }
+  function focusStop() { S.focusEnd = 0; ls(LS_FOCUS, null); deskQuiet(false); render(); focusTick(); }
 
   /* ================= Benachrichtigungen ================= */
   function notifyOn() { return ls(LS_NOTIFY) === '1' && typeof Notification !== 'undefined' && Notification.permission === 'granted'; }
   function notify(title, body, taskId) {
-    if (!notifyOn()) return;
+    if (!notifyOn() || S.focusEnd) return; // im Fokus keine Ablenkung
     if (document.visibilityState === 'visible' && document.hasFocus()) return; // App ist offen: Toast reicht
     try {
       var n = new Notification(title, { body: body, icon: 'icons/icon-192.png', tag: taskId || undefined });
@@ -2794,7 +3036,7 @@
     if (keepId) { var f = $(keepId); if (f) { f.focus(); try { f.setSelectionRange(caret, caret); } catch (e) {} } }
     if (count) countUp();
     if (S.ctx && !byId(S.tasks, S.ctx)) ctxClose();
-    focusTick(); timerTick(); musicUI();
+    focusTick(); timerTick(); musicUI(); focusView();
     calMeta();
     if (!S.connInit) { S.connInit = true; setTimeout(connInit, 400); }
     if (!S.checked) { S.checked = true; setTimeout(checkGoal, 800); }
@@ -3027,6 +3269,7 @@
       '<button type="button" class="row-btn accent" data-action="import-csv"><span class="grow">Aufgaben importieren (CSV / Excel)</span></button>' +
       '<button type="button" class="row-btn" data-action="trash"><span class="grow">Papierkorb</span><i class="chev"></i></button></div>' +
       (DESK ? '<div class="sec-h"><span>Windows</span></div><div class="group"><button type="button" class="row-btn" data-action="desk-autostart"><span class="grow">Mit Windows starten</span><span class="muted" id="auto-state">' + (S.deskAuto ? 'An' : 'Aus') + '</span></button>' +
+        (DESK.setFocus ? '<button type="button" class="row-btn" data-action="focus-dnd"><span class="grow">Im Fokus Windows-Benachrichtigungen stumm</span><span class="muted" id="fdnd-state">' + (focusDnd() ? 'An' : 'Aus') + '</span></button>' : '') +
         '<div class="row-btn static"><span class="grow">Schnell eine Aufgabe von überall</span><kbd>Strg + Leertaste</kbd></div></div>' +
         '<p class="meta-line">Schließen lässt Effectra unten rechts in der Taskleiste weiterlaufen – so kommen Erinnerungen auch, wenn das Fenster zu ist.</p>' : '') +
       '<p class="meta-line">Automatisch: jede Nacht (30 Tage lang) und jeden Sonntag (ein halbes Jahr lang). Gelöschte Aufgaben bleiben 30 Tage im Papierkorb.</p>' +
@@ -3050,7 +3293,7 @@
     ctxClose(); closePalette();
     var html = kind === 'task' ? taskSheet(id) : kind === 'project' ? projectSheet(id) : kind === 'inbox' ? inboxSheet() : kind === 'trash' ? trashSheet()
       : kind === 'update' ? wrapForm('upd-form', '', updateInner()) : kind === 'whatsnew' ? whatsNewSheet() : kind === 'keys' ? keysSheet() : kind === 'chat' ? chatSheet() : kind === 'draft' ? draftSheet(id) :
-      kind === 'tpl' ? tplSheet(id) : kind === 'tpl-apply' ? tplApplySheet(id) : kind === 'cal' ? calSheet() : kind === 'mail' ? mailSheet() : settingsSheet();
+      kind === 'tpl' ? tplSheet(id) : kind === 'tpl-apply' ? tplApplySheet(id) : kind === 'cal' ? calSheet() : kind === 'mail' ? mailSheet() : kind === 'music' ? musicSheet() : settingsSheet();
     if (!html) return;
     clearTimeout(S.closeTimer);
     S.armed = null; S.aiSubs = []; S.sheet = { kind: kind, id: id || '', updKey: kind === 'update' ? updKey() : '' }; S.last = document.activeElement; S.draftSubs = [];
@@ -3062,6 +3305,7 @@
     if (kind === 'settings') loadBackups();
     if (kind === 'cal') calMeta(true);
     if (kind === 'mail') gmLoad(true);
+    if (kind === 'music') { mdLoad(MD.tab === 'lists' ? 'lists' : 'liked'); spPoll(true); }
     if (kind === 'trash') { refreshTrash(); loadTrash(); }
     if (kind === 'inbox') { markInboxRead(); renderChrome(); }
     if (kind === 'chat') { chatDraw(); var cq = $('chat-q'); if (cq && window.innerWidth >= 760) cq.focus(); }
@@ -3382,7 +3626,15 @@
       case 'cal-add': calAdd(); break;
       case 'cal-del': calDel(id); break;
       case 'sp-connect': spConnect(); break;
-      case 'sp-off': jset(LS_SP, null); SP.now = null; refreshConn(); toast('Spotify getrennt'); break;
+      case 'sp-off': jset(LS_SP, null); SP.now = null; MD.liked = MD.lists = MD.res = null; refreshConn(); mdUI(); toast('Spotify getrennt'); break;
+      case 'md-toggle': case 'md-open': mdToggle(); break;
+      case 'md-tab': MD.tab = el.dataset.seg; if (MD.tab !== 'search') mdLoad(MD.tab); mdUI(); if (MD.tab === 'search') { var mr = el.closest('.md-root'); setTimeout(function () { var mq = mr && document.contains(mr) ? mr.querySelector('.md-q') : document.querySelector('.md-root:not([hidden]) .md-q'); if (mq) mq.focus(); }, 30); } break;
+      case 'md-play': mdPlay(el.dataset.src, Number(el.dataset.i)); break;
+      case 'focus-hide': S.focusHide = true; focusView(); break;
+      case 'focus-show': S.focusHide = false; focusView(); break;
+      case 'focus-end-ok': alarmStop(); break;
+      case 'focus-more': alarmStop(); focusStart(5); break;
+      case 'focus-dnd': ls(LS_FDND, focusDnd() ? '0' : null); var fd = $('fdnd-state'); if (fd) fd.textContent = focusDnd() ? 'An' : 'Aus'; if (S.focusEnd) deskQuiet(focusDnd()); break;
       case 'sp': spControl(el.dataset.cmd); break;
       case 'sp-open': if (SP.now && /^https:\/\/open\.spotify\.com\//.test(SP.now.url)) openOut(SP.now.url); break;
       case 'gm-connect': gmConnect(); break;
@@ -3414,7 +3666,7 @@
       case 'export-csv': exportCsv(); break;
       case 'focus-start': focusStart(Number(el.dataset.min) || 25); break;
       case 'focus-stop': focusStop(); break;
-      case 'focus-pill': goTab('heute'); break;
+      case 'focus-pill': S.focusHide = false; focusView(); break;
       case 'cal-prev': case 'cal-next':
         if (S.calView === 'week') { S.calDay = addDays(S.calDay || today(), a === 'cal-next' ? 7 : -7); S.calMonth = monthStart(S.calDay); render(); break; }
         var cm = parse(S.calMonth || monthStart(today())); cm.setMonth(cm.getMonth() + (a === 'cal-next' ? 1 : -1)); S.calMonth = ymd(cm); render(); break;

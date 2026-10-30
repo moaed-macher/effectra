@@ -1,7 +1,9 @@
 {
-  "version": "3.2.1",
+  "version": "3.3.0",
   "date": "2026-10-30",
   "notes": [
-    "Spotify ist eingerichtet: Einstellungen → Verbindungen → Spotify → Verbinden."
+    "Spotify links in der Seitenleiste: Lieblingssongs, Playlists und Suche – mit einem Klick abspielen. Die Höhe kannst du unten ziehen.",
+    "Ohne offenes Spotify: Im Browser spielt Effectra selbst, im Windows-Programm startet Spotify automatisch.",
+    "Fokus-Modus: ruhige Vollbild-Ansicht, Windows-Benachrichtigungen stumm, am Ende mehrere kurze Töne."
   ]
 }

@@ -3,7 +3,7 @@
 // Dateien mit Versionsnummer (?v=…, auch vendor/supabase.js) kommen direkt aus dem Speicher.
 // Fremde Adressen (Supabase-Daten) und version.json laufen nie über den Speicher –
 // der Service Worker darf wegen der CSP (connect-src) keine fremden Server abrufen.
-const CACHE = 'effectra-3.2.1';
+const CACHE = 'effectra-3.3.0';
 
 self.addEventListener('install', (e) => { self.skipWaiting(); });
 self.addEventListener('activate', (e) => {

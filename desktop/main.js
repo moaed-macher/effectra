@@ -4,6 +4,7 @@
 const { app, BrowserWindow, shell, Menu, Notification, ipcMain, nativeTheme, net, Tray, nativeImage, globalShortcut } = require("electron");
 const path = require("path");
 const fs = require("fs");
+const { execFile, execFileSync } = require("child_process");
 
 const APP_URL = "https://effectra.netlify.app/";
 const APP_ORIGIN = new URL(APP_URL).origin;
@@ -147,7 +148,7 @@ function createWindow(forceShow) {
         webPreferences: { contextIsolation: true, nodeIntegration: false, sandbox: true }
       } };
     }
-    if (u.protocol === "https:" || u.protocol === "webcal:") shell.openExternal(url);
+    if (u.protocol === "https:" || u.protocol === "webcal:" || u.protocol === "spotify:") shell.openExternal(url);
     return { action: "deny" };
   });
   win.webContents.on("did-create-window", (child) => {
@@ -229,13 +230,50 @@ ipcMain.on("desk:theme", (e, dark) => {
   win.setBackgroundColor(dark ? "#000000" : "#F2F2F7");
 });
 ipcMain.handle("desk:autostart", (e, on) => (trusted(e) ? setAutostart(!!on) : null));
+ipcMain.handle("desk:focus", (e, on) => (trusted(e) ? setQuiet(!!on) : false));
+
+// Fokus: Windows-Banner stummschalten (Schalter „Benachrichtigungen“ des aktuellen Nutzers, kein Admin nötig).
+// Windows hat dafür keine offizielle Schnittstelle – der vorherige Wert wird gemerkt und beim Fokus-Ende,
+// beim Beenden und notfalls beim nächsten Start wiederhergestellt.
+const PN_KEY = "HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\PushNotifications";
+function reg(args) { return new Promise((res) => execFile("reg", args, { windowsHide: true }, (err, out) => res(err ? null : String(out)))); }
+async function setQuiet(on) {
+  if (process.platform !== "win32") return false;
+  const st = loadState();
+  if (on) {
+    if (!st.quiet) {
+      const out = await reg(["query", PN_KEY, "/v", "ToastEnabled"]);
+      const m = out && /ToastEnabled\s+REG_DWORD\s+0x([0-9a-f]+)/i.exec(out);
+      setFlag("quiet", { prev: m ? parseInt(m[1], 16) : null });
+    }
+    return (await reg(["add", PN_KEY, "/v", "ToastEnabled", "/t", "REG_DWORD", "/d", "0", "/f"])) !== null;
+  }
+  if (!st.quiet) return true;
+  const prev = st.quiet.prev;
+  const ok = prev === null || prev === undefined
+    ? (await reg(["delete", PN_KEY, "/v", "ToastEnabled", "/f"])) !== null
+    : (await reg(["add", PN_KEY, "/v", "ToastEnabled", "/t", "REG_DWORD", "/d", String(prev), "/f"])) !== null;
+  setFlag("quiet", null);
+  return ok;
+}
+function restoreQuietSync() {
+  const st = loadState();
+  if (process.platform !== "win32" || !st.quiet) return;
+  try {
+    const prev = st.quiet.prev;
+    if (prev === null || prev === undefined) execFileSync("reg", ["delete", PN_KEY, "/v", "ToastEnabled", "/f"], { windowsHide: true, stdio: "ignore" });
+    else execFileSync("reg", ["add", PN_KEY, "/v", "ToastEnabled", "/t", "REG_DWORD", "/d", String(prev), "/f"], { windowsHide: true, stdio: "ignore" });
+  } catch (e) {}
+  setFlag("quiet", null);
+}
 ipcMain.on("desk:retry", (e) => { if (trusted(e) && win && !win.isDestroyed()) win.loadURL(APP_URL); });
 
 app.on("second-instance", () => showWin());
 app.on("before-quit", () => { quitting = true; });
-app.on("will-quit", () => { try { globalShortcut.unregisterAll(); } catch (e) {} });
+app.on("will-quit", () => { try { globalShortcut.unregisterAll(); } catch (e) {} restoreQuietSync(); });
 Menu.setApplicationMenu(null);
 app.whenReady().then(() => {
+  restoreQuietSync(); // falls Effectra im Fokus abgestürzt ist
   createWindow();
   setupTray();
   if (!globalShortcut.register("CommandOrControl+Space", quickAdd)) globalShortcut.register("CommandOrControl+Shift+Space", quickAdd);

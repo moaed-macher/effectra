@@ -1,4 +1,4 @@
-// Kleine, sichere Brücke zwischen App und Windows-Programm (Updates, Fensterfarbe, Autostart, Schnell-Eingabe)
+// Kleine, sichere Brücke zwischen App und Windows-Programm (Updates, Fensterfarbe, Autostart, Schnell-Eingabe, Fokus)
 const { contextBridge, ipcRenderer } = require("electron");
 
 contextBridge.exposeInMainWorld("effectraDesktop", {
@@ -9,5 +9,6 @@ contextBridge.exposeInMainWorld("effectraDesktop", {
   setTheme: (dark) => ipcRenderer.send("desk:theme", !!dark),
   setAutostart: (on) => ipcRenderer.invoke("desk:autostart", !!on),
   onQuick: (cb) => { ipcRenderer.on("desk:quick", () => { try { cb(); } catch (err) {} }); },
-  retry: () => ipcRenderer.send("desk:retry")
+  retry: () => ipcRenderer.send("desk:retry"),
+  setFocus: (on) => ipcRenderer.invoke("desk:focus", !!on)
 });
