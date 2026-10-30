@@ -4,11 +4,11 @@
 
   /* ================= Konstanten ================= */
   // Bei jeder Veröffentlichung erhöhen – gleich wie in version.json und den ?v= in index.html
-  var APP_VERSION = '3.1.0';
+  var APP_VERSION = '3.2.0';
   var CHANGES = [
-    'Mehrere Zuständige: Eine Aufgabe kann jetzt mehreren Leuten gehören.',
-    'Neue Auswahllisten: schöner, klarer und mit Tastatur bedienbar – statt der grauen Windows-Liste.',
-    'Update-Symbol oben: zeigt, wenn ein Update lädt oder bereit ist. Du kannst weiterarbeiten – es wird beim Schließen installiert.'
+    'Kalender: Deine Aufgaben erscheinen in Google Kalender, am iPhone oder in Outlook – und deine Termine in Effectra.',
+    'Spotify: Was gerade läuft, mit Pause und Weiter – direkt in Effectra.',
+    'Gmail: Ungelesene Mails auf „Heute“, aus jeder Mail wird mit einem Klick eine Aufgabe.'
   ];
   var DESK = window.effectraDesktop || null; // nur in der Windows-App vorhanden
   if (DESK) document.documentElement.classList.add('desk');
@@ -781,6 +781,8 @@
     if (dueToday.length) lists += '<section><div class="sec-h"><span>Heute fällig</span><span>' + dueToday.length + '</span></div>' + group(dueToday) + '</section>';
     if (working.length) lists += '<section><div class="sec-h"><span>In Arbeit</span><span>' + working.length + '</span></div>' + group(working) + '</section>';
     if (next.length) lists += '<section><div class="sec-h"><span>Als Nächstes</span></div>' + group(next) + '</section>';
+    var evToday = evByDay(evFor(t0, t0))[t0] || [];
+    if (evToday.length) lists = '<section><div class="sec-h"><span>Termine heute</span><span>' + evToday.length + '</span></div>' + evRows(evToday) + '</section>' + lists;
     if (!lists) lists = '<div class="calm">' + I.calm + '<div><b>Alles im Griff</b><span>' + (mine ? 'Für dich ist heute nichts Dringendes offen.' : 'Im Team ist heute nichts Dringendes offen.') + '</span></div></div>';
 
     // Kennzahlen-Kacheln
@@ -817,13 +819,14 @@
         }).join('') + '</div>' : '<p class="empty-col">Keine offenen Deadlines</p>') + '</section>';
     }
 
-    return head + briefCard() + goalCard() + weekCard() + planCard() + quickAdd() + '<div class="scope-row"><span class="scope-ai">' + aiBtn('ai-plan', 'Tag planen') + '</span><div class="scope">' + segc({ list: [{ k: 'me', l: 'Ich' }, { k: 'team', l: 'Team' }], sel: S.scope, action: 'scope', label: 'Ansicht' }) + '</div></div>' + kpis +
+    var mus = musicHtml();
+    return head + '<div class="music-m" data-slot="music"' + (mus ? '' : ' hidden') + '>' + mus + '</div>' + briefCard() + goalCard() + weekCard() + planCard() + quickAdd() + '<div class="scope-row"><span class="scope-ai">' + aiBtn('ai-plan', 'Tag planen') + '</span><div class="scope">' + segc({ list: [{ k: 'me', l: 'Ich' }, { k: 'team', l: 'Team' }], sel: S.scope, action: 'scope', label: 'Ansicht' }) + '</div></div>' + kpis +
       '<div class="widgets"><section class="widget"><div class="w-head"><span class="w-title">' + (mine ? 'Deine Aufgaben' : 'Team gesamt') + '</span><span class="w-sub">' + st.done + ' von ' + st.total + '</span></div>' +
       '<div class="ring-line">' + ring(st.pct) + '<div class="legend">' +
       '<div class="lg"><i class="dot" style="--c:var(--accent)"></i><span>Erledigt</span><b>' + st.done + '</b></div>' +
       '<div class="lg"><i class="dot" style="--c:var(--c-orange)"></i><span>In Arbeit</span><b>' + st.work + '</b></div>' +
       '<div class="lg"><i class="dot" style="--c:var(--label3)"></i><span>Offen</span><b>' + st.open + '</b></div></div></div></section>' +
-      '<section class="widget"><div class="w-head"><span class="w-title">Letzte 7 Tage</span><span class="w-sub">' + pl(wk.total, 'Aufgabe', 'Aufgaben') + ' erledigt</span></div><div class="bars">' + wk.html + '</div></section>' + focus + side + '</div>' +
+      '<section class="widget"><div class="w-head"><span class="w-title">Letzte 7 Tage</span><span class="w-sub">' + pl(wk.total, 'Aufgabe', 'Aufgaben') + ' erledigt</span></div><div class="bars">' + wk.html + '</div></section>' + focus + side + '</div>' + mailCard() +
       '<div class="grid2">' + lists + '</div>';
   }
 
@@ -980,18 +983,20 @@
     var L = S.tasks.filter(function (t) { return t.due && (!S.calMine || isMine(t)); });
     var byDay = {};
     L.forEach(function (t) { (byDay[t.due] = byDay[t.due] || []).push(t); });
+    var wk0 = weekStart(S.calDay), EV = S.calView === 'week' ? evByDay(evFor(wk0, addDays(wk0, 6))) : evByDay(evFor(start, addDays(start, 41)));
     var cells = '';
     for (var i = 0; i < 42; i++) {
       var d = addDays(start, i), list = (byDay[d] || []).sort(sortActive), inMonth = d.slice(0, 7) === S.calMonth.slice(0, 7);
       if (i === 35 && !inMonth) break;
-      var chips = list.slice(0, 3).map(function (t) {
+      var evs = EV[d] || [], nEv = Math.min(evs.length, list.length ? 1 : 3), more = list.length + evs.length - 3;
+      var chips = evs.slice(0, nEv).map(function (e) { return evChip(e); }).join('') + list.slice(0, 3 - nEv).map(function (t) {
         var p = t.project_id ? byId(S.projects, t.project_id) : null;
         return '<span class="cal-chip' + (t.status === 'erledigt' ? ' done' : '') + '" draggable="true" data-task="' + esc(t.id) + '" style="--c:var(--c-' + colorOf(p ? p.color : 'blue') + ')">' + esc(t.title) + '</span>';
       }).join('');
       var late = list.some(function (t) { return t.status !== 'erledigt' && d < t0; });
       cells += '<div role="button" tabindex="0" class="cal-day' + (inMonth ? '' : ' out') + (d === t0 ? ' today' : '') + (d === S.calDay ? ' sel' : '') + (late ? ' late' : '') + '" data-action="cal-day" data-day="' + d + '">' +
-        '<span class="cal-n">' + parse(d).getDate() + '</span>' + chips + (list.length > 3 ? '<span class="cal-more">+' + (list.length - 3) + '</span>' : '') +
-        (list.length ? '<span class="cal-dots">' + list.slice(0, 4).map(function () { return '<i></i>'; }).join('') + '</span>' : '') + '</div>';
+        '<span class="cal-n">' + parse(d).getDate() + '</span>' + chips + (more > 0 ? '<span class="cal-more">+' + more + '</span>' : '') +
+        (list.length || evs.length ? '<span class="cal-dots">' + evs.slice(0, 2).map(function (e) { return '<i class="ev" style="--c:var(--c-' + e.c + ')"></i>'; }).join('') + list.slice(0, 4 - Math.min(2, evs.length)).map(function () { return '<i></i>'; }).join('') + '</span>' : '') + '</div>';
     }
     var dayList = (byDay[S.calDay] || []).sort(sortActive);
     var noDue = S.tasks.filter(function (t) { return !t.due && t.status !== 'erledigt' && (!S.calMine || isMine(t)); }).sort(sortActive);
@@ -1001,11 +1006,12 @@
         var d = addDays(ws0, k), list = (byDay[d] || []).sort(sortActive), dt = parse(d);
         return '<div role="button" tabindex="0" class="cal-day wk-col' + (d === t0 ? ' today' : '') + (d === S.calDay ? ' sel' : '') + '" data-action="cal-day" data-day="' + d + '">' +
           '<span class="wk-h"><span>' + esc(fmtWd.format(dt).replace('.', '')) + '</span><span class="cal-n">' + dt.getDate() + '</span></span>' +
+          (EV[d] || []).map(function (e) { return evChip(e, true); }).join('') +
           list.map(function (t) {
             var p = t.project_id ? byId(S.projects, t.project_id) : null;
             return '<span class="cal-chip wk' + (t.status === 'erledigt' ? ' done' : '') + '" draggable="true" data-task="' + esc(t.id) + '" style="--c:var(--c-' + colorOf(p ? p.color : 'blue') + ')">' +
               (t.remind_at ? '<small>' + esc(hhmm(t.remind_at)) + '</small> ' : '') + esc(t.title) + '</span>';
-          }).join('') + (list.length ? '' : '<span class="wk-empty">frei</span>') + '</div>';
+          }).join('') + (list.length || (EV[d] || []).length ? '' : '<span class="wk-empty">frei</span>') + '</div>';
       }).join('') + '</div>';
     } else {
       grid = '<div class="cal-head">' + ['Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa', 'So'].map(function (x) { return '<span>' + x + '</span>'; }).join('') + '</div>' +
@@ -1020,9 +1026,10 @@
       segc({ list: [{ k: 'all', l: 'Alle' }, { k: 'mine', l: 'Meine' }], sel: S.calMine ? 'mine' : 'all', action: 'cal-filter', cls: 'auto', label: 'Zuständigkeit' }) + '</span></div>' +
       grid +
       '<div class="grid2"><section><div class="sec-h"><span>' + esc(fmtLong.format(parse(S.calDay))) + '</span><button type="button" class="txt-btn small" data-action="new-task-day">+ Aufgabe</button></div>' +
-      (dayList.length ? group(dayList) : '<p class="empty-col">Nichts geplant</p>') + '</section>' +
+      ((EV[S.calDay] || []).length ? evRows(EV[S.calDay]) + (dayList.length ? '<div style="height:10px"></div>' : '') : '') +
+      (dayList.length ? group(dayList) : (EV[S.calDay] || []).length ? '' : '<p class="empty-col">Nichts geplant</p>') + '</section>' +
       (noDue.length ? '<section><div class="sec-h"><span>Ohne Datum</span><span>' + noDue.length + '</span></div>' + group(noDue.slice(0, 8)) + '</section>' : '') + '</div>' +
-      '<p class="meta-line">Tipp: Am PC kannst du Aufgaben auf einen anderen Tag ziehen.</p>';
+      '<p class="meta-line">Tipp: Am PC kannst du Aufgaben auf einen anderen Tag ziehen. ' + (CAL.links && CAL.links.length ? '' : '<button type="button" class="txt-btn small" data-action="cal-sheet">Eigenen Kalender verbinden</button>') + '</p>';
   }
   function moveDue(id, day) {
     var t = byId(S.tasks, id); if (!t || t.due === day) return;
@@ -1030,6 +1037,378 @@
     run(S.sb.from('tasks').update({ due: day }).eq('id', id).select().single())
       .then(function (r) { if (r) upsert('tasks', r); toast('Verschoben auf ' + dueLabel(day)); queue(); })
       .catch(function (e) { t.due = prev; toast(errText(e)); queue(); });
+  }
+
+  /* ================= Verbindungen: Kalender, Spotify, Gmail ================= */
+  // Spotify und Gmail melden sich nur auf diesem Gerät an (Schlüssel bleiben im Browser, nichts davon landet in Supabase).
+  // Kalender: Abo-Link und eigene iCal-Adressen laufen über die Edge Function „calendar“.
+  var CONF = window.EFFECTRA_CONFIG || {};
+  var REDIRECT = location.origin + location.pathname.replace(/[^/]*$/, '') + 'oauth.html';
+  var LS_SP = 'effectra.spotify', LS_GM = 'effectra.gmail', LS_PEND = 'effectra.oauth.pending', LS_RES = 'effectra.oauth';
+  var IC = {
+    music: '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>',
+    mail: '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="2.5"/><path d="m4 7 8 6 8-6"/></svg>',
+    cal: '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3.5" y="5" width="17" height="15.5" rx="2.5"/><path d="M3.5 10h17M8 3v4M16 3v4"/></svg>',
+    play: '<svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor" aria-hidden="true"><path d="M8 5.5v13a1 1 0 0 0 1.5.86l10.5-6.5a1 1 0 0 0 0-1.72L9.5 4.64A1 1 0 0 0 8 5.5z"/></svg>',
+    pause: '<svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor" aria-hidden="true"><rect x="6" y="5" width="4" height="14" rx="1.2"/><rect x="14" y="5" width="4" height="14" rx="1.2"/></svg>',
+    next: '<svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor" aria-hidden="true"><path d="M5 6.2v11.6a1 1 0 0 0 1.55.83L15 13v4.5a1 1 0 0 0 2 0v-11a1 1 0 0 0-2 0V11L6.55 5.37A1 1 0 0 0 5 6.2z"/></svg>',
+    prev: '<svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor" aria-hidden="true"><path d="M19 6.2v11.6a1 1 0 0 1-1.55.83L9 13v4.5a1 1 0 0 1-2 0v-11a1 1 0 0 1 2 0V11l8.45-5.63A1 1 0 0 1 19 6.2z"/></svg>'
+  };
+  function jget(k) { try { return JSON.parse(ls(k) || 'null'); } catch (e) { return null; } }
+  function jset(k, v) { ls(k, v == null ? null : JSON.stringify(v)); }
+  function rnd(n) { var a = new Uint8Array(n); crypto.getRandomValues(a); return Array.prototype.map.call(a, function (b) { return ('0' + b.toString(16)).slice(-2); }).join(''); }
+  function b64url(buf) { var s = ''; new Uint8Array(buf).forEach(function (b) { s += String.fromCharCode(b); }); return btoa(s).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, ''); }
+  function deskTooOld() { return !!DESK && !(S.deskInfo && S.deskInfo.version && cmpVer(String(S.deskInfo.version), '3.2.0') >= 0); }
+  function usePopup() { return !!(finePtr && finePtr.matches) && !((window.matchMedia && window.matchMedia('(display-mode: standalone)').matches) || navigator.standalone === true); }
+  function openOut(url) { var w = window.open(url, '_blank', 'noopener'); if (!w && !DESK) location.href = url; }
+
+  // Anmeldung: am PC als kleines Fenster, am Handy per Weiterleitung (danach zurück in die App)
+  function oauthOpen(provider, url, extra) {
+    if (deskTooOld()) { toast('Bitte zuerst die Windows-App aktualisieren – oben auf das Update-Symbol klicken.'); return; }
+    var popup = usePopup(), st = provider + '.' + (popup ? 'p' : 'r') + '.' + rnd(12);
+    jset(LS_PEND, Object.assign({ provider: provider, state: st, at: Date.now() }, extra || {}));
+    ls(LS_RES, null);
+    var full = url + '&state=' + encodeURIComponent(st);
+    if (popup) {
+      var w = 520, h = 720, x = Math.max(0, Math.round((screen.width - w) / 2)), y = Math.max(0, Math.round((screen.height - h) / 2));
+      if (window.open(full, 'effectra-oauth', 'popup=yes,width=' + w + ',height=' + h + ',left=' + x + ',top=' + y)) return;
+      st = st.replace('.p.', '.r.'); jset(LS_PEND, Object.assign({ provider: provider, state: st, at: Date.now() }, extra || {}));
+      full = url + '&state=' + encodeURIComponent(st);
+    }
+    flushDelete();
+    location.assign(full);
+  }
+  function oauthResult(res) {
+    if (!res || !res.state) return;
+    var pend = jget(LS_PEND);
+    if (!pend || pend.state !== res.state) return;
+    ls(LS_RES, null); jset(LS_PEND, null);
+    if (Date.now() - pend.at > 20 * 60000) return;
+    if (res.error) { toast(res.error === 'access_denied' ? 'Verbindung abgebrochen' : 'Verbindung fehlgeschlagen'); return; }
+    if (pend.provider === 'spotify' && res.code) spFinish(res.code, pend.verifier);
+    else if (pend.provider === 'gmail' && res.token) gmFinish(res.token, res.expires);
+  }
+  try { var oauthBc = new BroadcastChannel('effectra-oauth'); oauthBc.onmessage = function (e) { oauthResult(e.data); }; } catch (e) {}
+  window.addEventListener('storage', function (e) { if (e.key === LS_RES && e.newValue) oauthResult(jget(LS_RES)); });
+  function connInit() {
+    var r = jget(LS_RES); if (r) oauthResult(r);
+    spPrep(); spPoll(true); gmLoad(false);
+  }
+  function refreshConn() {
+    var sp = $('conn-sp'), gm = $('conn-gm');
+    if (sp) { sp.dataset.action = spAuth() ? 'sp-off' : 'sp-connect'; sp.querySelector('.muted').textContent = connLabel(spOn(), !!spAuth()); }
+    if (gm) { gm.dataset.action = gmAuth() ? 'gm-off' : 'gm-connect'; gm.querySelector('.muted').textContent = connLabel(gmOn(), !!gmAuth()); }
+    musicUI(); mailUI();
+  }
+  function connLabel(on, linked) { return linked ? 'Verbunden · Trennen' : on ? 'Verbinden' : 'Noch nicht eingerichtet'; }
+  function connRows() {
+    var calN = CAL.links ? CAL.links.length : 0;
+    return '<div class="sec-h"><span>Verbindungen</span></div><div class="group">' +
+      '<button type="button" class="row-btn" data-action="cal-sheet"><span class="grow conn-l">' + IC.cal + ' Kalender</span><span class="muted">' + (CAL.feed ? 'Abo aktiv' : '') + (CAL.feed && calN ? ' · ' : '') + (calN ? calN + ' verbunden' : '') + '</span><i class="chev"></i></button>' +
+      '<button type="button" class="row-btn" id="conn-sp" data-action="' + (spAuth() ? 'sp-off' : 'sp-connect') + '"><span class="grow conn-l">' + IC.music + ' Spotify</span><span class="muted">' + connLabel(spOn(), !!spAuth()) + '</span></button>' +
+      '<button type="button" class="row-btn" id="conn-gm" data-action="' + (gmAuth() ? 'gm-off' : 'gm-connect') + '"><span class="grow conn-l">' + IC.mail + ' Gmail</span><span class="muted">' + connLabel(gmOn(), !!gmAuth()) + '</span></button></div>' +
+      '<p class="meta-line">Spotify und Gmail verbinden sich nur auf diesem Gerät. Musik und Mails werden nicht in Effectra gespeichert. Gmail kann nur lesen – Effectra verschickt oder löscht nie etwas.</p>';
+  }
+
+  /* ---------- Spotify ---------- */
+  var SP = { now: null, err: '', t: 0, pkce: null };
+  function spOn() { return !!CONF.spotifyClientId; }
+  function spAuth() { return jget(LS_SP); }
+  // Schlüssel vorab berechnen, damit das Anmeldefenster direkt beim Klick aufgeht (sonst blockt der Browser es)
+  function spPrep() {
+    if (!spOn() || SP.pkce || !(window.crypto && crypto.subtle)) return;
+    var ver = rnd(48);
+    crypto.subtle.digest('SHA-256', new TextEncoder().encode(ver)).then(function (h) { SP.pkce = { ver: ver, ch: b64url(h) }; }, function () {});
+  }
+  function spConnect() {
+    if (!spOn()) { toast('Spotify ist noch nicht eingerichtet.'); return; }
+    if (!SP.pkce) { spPrep(); toast('Einen Moment … bitte gleich nochmal tippen.'); return; }
+    var p = SP.pkce; SP.pkce = null;
+    oauthOpen('spotify', 'https://accounts.spotify.com/authorize?response_type=code&client_id=' + encodeURIComponent(CONF.spotifyClientId) +
+      '&redirect_uri=' + encodeURIComponent(REDIRECT) + '&code_challenge_method=S256&code_challenge=' + p.ch +
+      '&scope=' + encodeURIComponent('user-read-currently-playing user-read-playback-state user-modify-playback-state'), { verifier: p.ver });
+    spPrep();
+  }
+  function spTokenReq(params) {
+    return fetch('https://accounts.spotify.com/api/token', { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body: new URLSearchParams(params).toString() })
+      .then(function (r) { return r.json().catch(function () { return {}; }).then(function (j) { if (!r.ok || !j.access_token) { var e = new Error('token'); e.status = r.status; throw e; } return j; }); });
+  }
+  function spFinish(code, ver) {
+    busy(1);
+    spTokenReq({ grant_type: 'authorization_code', code: code, redirect_uri: REDIRECT, client_id: CONF.spotifyClientId, code_verifier: ver || '' }).then(function (j) {
+      busy(-1);
+      jset(LS_SP, { at: j.access_token, rt: j.refresh_token || '', exp: Date.now() + (Number(j.expires_in) || 3600) * 1000 });
+      toast('Spotify verbunden'); spPoll(true); refreshConn();
+    }, function () { busy(-1); toast('Spotify-Verbindung fehlgeschlagen. Ist dein Konto in der Spotify-App freigeschaltet?'); });
+  }
+  var spRefreshing = null;
+  function spToken() {
+    var a = spAuth();
+    if (!a) return Promise.reject(new Error('off'));
+    if (a.exp - 60000 > Date.now()) return Promise.resolve(a.at);
+    if (!a.rt) { jset(LS_SP, null); refreshConn(); return Promise.reject(new Error('off')); }
+    if (!spRefreshing) {
+      spRefreshing = spTokenReq({ grant_type: 'refresh_token', refresh_token: a.rt, client_id: CONF.spotifyClientId }).then(function (j) {
+        spRefreshing = null;
+        jset(LS_SP, { at: j.access_token, rt: j.refresh_token || a.rt, exp: Date.now() + (Number(j.expires_in) || 3600) * 1000 });
+        return j.access_token;
+      }, function (e) {
+        spRefreshing = null;
+        if (e && (e.status === 400 || e.status === 401)) { jset(LS_SP, null); SP.now = null; refreshConn(); toast('Spotify-Verbindung abgelaufen – bitte neu verbinden'); }
+        throw new Error('off');
+      });
+    }
+    return spRefreshing;
+  }
+  function spApi(method, path) {
+    return spToken().then(function (tk) { return fetch('https://api.spotify.com/v1' + path, { method: method, headers: { Authorization: 'Bearer ' + tk } }); })
+      .then(function (r) { if (r.status === 401) { var a = spAuth(); if (a) { a.exp = 0; jset(LS_SP, a); } } return r; });
+  }
+  function spImg(it) {
+    var im = (it.album && it.album.images) || it.images || (it.show && it.show.images) || [], s = im[im.length - 1];
+    return s && /^https:\/\/[a-z0-9.-]+\.(scdn\.co|spotifycdn\.com)\//i.test(s.url) ? s.url : '';
+  }
+  function spPoll(force) {
+    if (!spAuth() || document.visibilityState === 'hidden' || S.screen !== 'app') return;
+    if (!force && Date.now() - SP.t < 12000) return;
+    SP.t = Date.now();
+    spApi('GET', '/me/player?additional_types=episode').then(function (r) {
+      if (r.status === 204) return null;
+      if (!r.ok) throw new Error(String(r.status));
+      return r.json();
+    }).then(function (j) {
+      var it = j && j.item;
+      SP.now = it ? { title: String(it.name || ''), artist: (it.artists || []).map(function (x) { return x.name; }).join(', ') || (it.show && it.show.name) || '', img: spImg(it),
+        playing: !!j.is_playing, url: it.external_urls && it.external_urls.spotify || '' } : null;
+      SP.err = ''; musicUI();
+    }, function (e) { SP.err = e && e.message === 'off' ? '' : 'x'; musicUI(); });
+  }
+  setInterval(function () { spPoll(false); }, 15000);
+  document.addEventListener('visibilitychange', function () { if (document.visibilityState === 'visible') { spPoll(false); gmLoad(false); } });
+  function spControl(cmd) {
+    var m = { play: ['PUT', '/me/player/play'], pause: ['PUT', '/me/player/pause'], next: ['POST', '/me/player/next'], prev: ['POST', '/me/player/previous'] }[cmd];
+    if (!m) return;
+    if (SP.now && (cmd === 'play' || cmd === 'pause')) { SP.now.playing = cmd === 'play'; musicUI(); }
+    spApi(m[0], m[1]).then(function (r) {
+      if (r.status === 403) toast('Steuern geht nur mit Spotify Premium.');
+      else if (r.status === 404) toast('Kein aktives Gerät – starte Spotify kurz auf Handy oder PC.');
+      setTimeout(function () { spPoll(true); }, 700);
+    }, function () { toast('Spotify ist gerade nicht erreichbar.'); setTimeout(function () { spPoll(true); }, 700); });
+  }
+  function musicHtml() {
+    if (!spAuth()) return '';
+    var n = SP.now;
+    if (!n) return '<div class="music idle"><span class="m-art">' + IC.music + '</span><span class="m-t"><b>Spotify</b><span>' + (SP.err ? 'Gerade nicht erreichbar' : 'Gerade läuft nichts') + '</span></span></div>';
+    return '<div class="music' + (n.playing ? ' on' : '') + '">' +
+      (n.img ? '<img class="m-art" src="' + esc(n.img) + '" alt="" width="40" height="40" referrerpolicy="no-referrer">' : '<span class="m-art">' + IC.music + '</span>') +
+      '<button type="button" class="m-t" data-action="sp-open" title="In Spotify öffnen"><b>' + esc(n.title) + '</b><span>' + esc(n.artist) + '</span></button>' +
+      '<span class="m-btns"><button type="button" data-action="sp" data-cmd="prev" aria-label="Vorheriges Lied">' + IC.prev + '</button>' +
+      '<button type="button" class="m-main" data-action="sp" data-cmd="' + (n.playing ? 'pause' : 'play') + '" aria-label="' + (n.playing ? 'Pause' : 'Abspielen') + '">' + (n.playing ? IC.pause : IC.play) + '</button>' +
+      '<button type="button" data-action="sp" data-cmd="next" aria-label="Nächstes Lied">' + IC.next + '</button></span></div>';
+  }
+  function musicUI() {
+    var h = musicHtml();
+    Array.prototype.forEach.call(document.querySelectorAll('[data-slot="music"]'), function (el) { if (el.innerHTML !== h) el.innerHTML = h; el.hidden = !h; });
+  }
+
+  /* ---------- Gmail (nur lesen) ---------- */
+  var GM = { list: null, t: 0, err: '', loading: false };
+  function gmOn() { return !!CONF.googleClientId; }
+  function gmAuth() { return jget(LS_GM); }
+  function gmValid() { var a = gmAuth(); return !!a && a.exp - 60000 > Date.now(); }
+  function gmConnect() {
+    if (!gmOn()) { toast('Gmail ist noch nicht eingerichtet.'); return; }
+    var a = gmAuth();
+    oauthOpen('gmail', 'https://accounts.google.com/o/oauth2/v2/auth?response_type=token&client_id=' + encodeURIComponent(CONF.googleClientId) +
+      '&redirect_uri=' + encodeURIComponent(REDIRECT) + '&scope=' + encodeURIComponent('https://www.googleapis.com/auth/gmail.readonly') +
+      '&include_granted_scopes=true' + (a && a.email ? '&login_hint=' + encodeURIComponent(a.email) : '&prompt=select_account'));
+  }
+  function gmFinish(token, exp) {
+    var a = { at: token, exp: Date.now() + (Number(exp) || 3600) * 1000, email: (gmAuth() || {}).email || '' };
+    jset(LS_GM, a);
+    toast('Gmail verbunden');
+    gmApi('/profile').then(function (j) { if (j && j.emailAddress) { a.email = String(j.emailAddress); jset(LS_GM, a); } }, function () {});
+    GM.err = ''; gmLoad(true); refreshConn();
+  }
+  function gmApi(path) {
+    var a = gmAuth();
+    if (!a || !gmValid()) return Promise.reject(new Error('expired'));
+    return fetch('https://gmail.googleapis.com/gmail/v1/users/me' + path, { headers: { Authorization: 'Bearer ' + a.at } }).then(function (r) {
+      if (r.status === 401) { a.exp = 0; jset(LS_GM, a); throw new Error('expired'); }
+      if (!r.ok) throw new Error('http');
+      return r.json();
+    });
+  }
+  function mHead(m, n) { var h = (m.payload && m.payload.headers) || []; for (var i = 0; i < h.length; i++) if (String(h[i].name).toLowerCase() === n) return String(h[i].value || ''); return ''; }
+  function plainText(s) { try { return new DOMParser().parseFromString(String(s), 'text/html').documentElement.textContent || ''; } catch (e) { return String(s); } }
+  function gmLoad(force) {
+    if (!gmAuth() || GM.loading || S.screen !== 'app') return;
+    if (!force && GM.list && Date.now() - GM.t < 180000) return;
+    if (!gmValid()) { GM.err = 'expired'; mailUI(); return; }
+    GM.loading = true;
+    gmApi('/messages?maxResults=15&q=' + encodeURIComponent('in:inbox is:unread newer_than:14d -category:promotions -category:social')).then(function (j) {
+      return Promise.all((j.messages || []).slice(0, 15).map(function (m) {
+        return gmApi('/messages/' + encodeURIComponent(m.id) + '?format=metadata&metadataHeaders=From&metadataHeaders=Subject').catch(function () { return null; });
+      }));
+    }).then(function (msgs) {
+      GM.list = msgs.filter(Boolean).map(function (m) {
+        var from = mHead(m, 'from'), mm = /^\s*"?([^"<]*?)"?\s*<([^>]+)>/.exec(from);
+        return { id: String(m.id), thread: String(m.threadId || m.id), from: (mm && mm[1].trim()) || (mm && mm[2]) || from, addr: mm ? mm[2] : from,
+          subject: mHead(m, 'subject').slice(0, 200) || '(ohne Betreff)', snippet: plainText(m.snippet || '').slice(0, 300), date: Number(m.internalDate) || 0 };
+      });
+      GM.t = Date.now(); GM.err = ''; GM.loading = false; mailUI();
+    }, function (e) { GM.loading = false; GM.err = e && e.message === 'expired' ? 'expired' : 'x'; mailUI(); });
+  }
+  function gmLink(m) { var a = gmAuth() || {}; return 'https://mail.google.com/mail/u/' + encodeURIComponent(a.email || '0') + '/#inbox/' + encodeURIComponent(m.thread); }
+  function mailRows(list) {
+    return list.map(function (m) {
+      return '<div class="mail-row"><button type="button" class="mail-main" data-action="mail-open" data-id="' + esc(m.id) + '"><span class="mail-top"><b>' + esc(m.from) + '</b><time>' + esc(m.date ? ago(m.date) : '') + '</time></span>' +
+        '<span class="mail-s">' + esc(m.subject) + '</span><span class="mail-n">' + esc(m.snippet) + '</span></button>' +
+        '<button type="button" class="pill-btn" data-action="mail-task" data-id="' + esc(m.id) + '">Aufgabe</button></div>';
+    }).join('');
+  }
+  function mailBody(max) {
+    if (GM.err === 'expired' || !gmValid()) return '<div class="mail-exp"><span>Aus Sicherheitsgründen erlaubt Google die Verbindung nur eine Stunde.</span><button type="button" class="btn-t" data-action="gm-connect">Neu verbinden</button></div>';
+    if (!GM.list) return '<p class="empty-col">Lädt …</p>';
+    if (GM.err) return '<p class="empty-col">Gmail ist gerade nicht erreichbar.</p>';
+    if (!GM.list.length) return '<p class="empty-col">Keine ungelesenen Mails</p>';
+    return '<div class="mail-list">' + mailRows(GM.list.slice(0, max)) + '</div>';
+  }
+  function mailCard() {
+    if (!gmAuth()) return '';
+    var n = GM.list && gmValid() ? GM.list.length : 0;
+    return '<section class="widget mail-w" data-slot="mail"><div class="w-head"><span class="w-title">' + IC.mail + ' Posteingang</span><span class="w-sub">' + (n ? n + ' ungelesen' : '') + '</span>' +
+      (n > 4 ? '<button type="button" class="txt-btn small" data-action="mail-all">Alle</button>' : '') + '</div>' + mailBody(4) + '</section>';
+  }
+  function mailUI() {
+    var el = document.querySelector('[data-slot="mail"]');
+    if (el) { var h = mailCard(); if (!h) el.remove(); else if (el.outerHTML !== h) el.outerHTML = h; }
+    var sh = $('mail-body'); if (sh) sh.innerHTML = mailBody(15);
+  }
+  function mailSheet() {
+    return wrapForm('mail-form', '', head('Posteingang', '', 'Fertig') + '<div class="mail-sheet" id="mail-body">' + mailBody(15) + '</div>' +
+      '<p class="meta-line">Ungelesene Mails der letzten 14 Tage (ohne Werbung und soziale Netzwerke). Effectra kann nur lesen.</p>');
+  }
+  function mailTask(id) {
+    var m = (GM.list || []).filter(function (x) { return x.id === id; })[0];
+    if (!m) return;
+    S.preset = { title: m.subject.slice(0, 200), notes: ('E-Mail von ' + m.from + (m.addr && m.addr !== m.from ? ' (' + m.addr + ')' : '') + '\n' + m.snippet + '\n\nIn Gmail öffnen: ' + gmLink(m)).slice(0, 5000) };
+    if (S.sheet) closeSheet();
+    setTimeout(function () { openSheet('task'); }, S.sheet ? 320 : 0);
+  }
+
+  /* ---------- Kalender ---------- */
+  var CAL = { ws: null, feed: null, links: null, ev: {}, loading: {} };
+  var CAL_COLORS = ['purple', 'teal', 'orange', 'pink', 'green', 'red', 'blue'];
+  function calMeta(force) {
+    if (!S.ws || (!force && CAL.ws === S.ws)) return Promise.resolve();
+    CAL.ws = S.ws;
+    return Promise.all([
+      S.sb.from('calendar_feeds').select('token,scope').eq('workspace_id', S.ws).maybeSingle(),
+      S.sb.from('calendar_links').select('id,name,url,color').order('created_at')
+    ]).then(function (r) {
+      CAL.feed = (r[0] && r[0].data) || null; CAL.links = (r[1] && r[1].data) || []; CAL.ev = {};
+      queue(); calRedraw();
+    }, function () { CAL.links = CAL.links || []; });
+  }
+  function feedUrl() { return CAL.feed ? String(CONF.supabaseUrl || '').replace(/\/+$/, '') + '/functions/v1/calendar?t=' + CAL.feed.token : ''; }
+  function evFor(from, to) {
+    if (!CAL.links || !CAL.links.length) return [];
+    var k = from + '|' + to, c = CAL.ev[k];
+    if ((!c || Date.now() - c.at > 600000) && !CAL.loading[k]) {
+      CAL.loading[k] = true;
+      var tz = ''; try { tz = Intl.DateTimeFormat().resolvedOptions().timeZone || ''; } catch (e) {}
+      S.sb.functions.invoke('calendar', { body: { from: from, to: to, tz: tz } }).then(function (r) {
+        CAL.loading[k] = false;
+        var d = r && r.data;
+        CAL.ev[k] = { at: Date.now(), list: (d && !r.error && d.events) || (c ? c.list : []), errors: (d && d.errors) || {} };
+        queue();
+      }, function () { CAL.loading[k] = false; CAL.ev[k] = { at: Date.now(), list: c ? c.list : [], errors: {} }; });
+    }
+    return c ? c.list : [];
+  }
+  function calColor(id) { var l = (CAL.links || []).filter(function (x) { return x.id === id; })[0]; return colorOf(l ? l.color : 'gray'); }
+  function evByDay(list) {
+    var m = {};
+    list.forEach(function (e) {
+      var d0, d1, time = '';
+      if (e.all) { d0 = e.start; d1 = addDays(e.end || e.start, -1); if (d1 < d0) d1 = d0; }
+      else { d0 = ymd(new Date(e.start)); d1 = ymd(new Date(new Date(e.end).getTime() - 1)); if (d1 < d0) d1 = d0; time = hhmm(e.start); }
+      for (var d = d0, n = 0; d <= d1 && n < 14; d = addDays(d, 1), n++) (m[d] = m[d] || []).push({ title: e.title, loc: e.loc || '', time: d === d0 ? time : '', all: e.all || d !== d0, c: calColor(e.cal) });
+    });
+    Object.keys(m).forEach(function (d) { m[d].sort(function (a, b) { return (a.all ? '' : a.time || '99') < (b.all ? '' : b.time || '99') ? -1 : 1; }); });
+    return m;
+  }
+  function evChip(e, wk) { return '<span class="cal-chip ev' + (wk ? ' wk' : '') + '" style="--c:var(--c-' + e.c + ')" title="' + esc(e.title + (e.loc ? ' · ' + e.loc : '')) + '">' + (e.time ? '<small>' + esc(e.time) + '</small> ' : '') + esc(e.title) + '</span>'; }
+  function evRows(list) {
+    return '<div class="group ev-list">' + list.map(function (e) {
+      return '<div class="ev-row"><i class="ev-bar" style="--c:var(--c-' + e.c + ')"></i><span class="ev-time">' + (e.all ? 'ganztägig' : esc(e.time)) + '</span><span class="ev-t"><b>' + esc(e.title) + '</b>' + (e.loc ? '<span>' + esc(e.loc) + '</span>' : '') + '</span></div>';
+    }).join('') + '</div>';
+  }
+  function calLinksHtml() {
+    if (!CAL.links) return '<div class="row-btn static"><span class="grow muted">Lädt …</span></div>';
+    var errs = {}; Object.keys(CAL.ev).forEach(function (k) { Object.assign(errs, CAL.ev[k].errors || {}); });
+    if (!CAL.links.length) return '<div class="row-btn static"><span class="grow muted">Noch kein Kalender verbunden</span></div>';
+    return CAL.links.map(function (l) {
+      return '<div class="row-btn static"><i class="dot" style="--c:var(--c-' + colorOf(l.color) + ')"></i><span class="grow">' + esc(l.name) + (errs[l.id] ? '<small class="cl-err">' + esc(errs[l.id]) + '</small>' : '') + '</span>' +
+        '<button type="button" class="txt-btn small danger" data-action="cal-del" data-id="' + esc(l.id) + '">' + (S.armed === 'cal:' + l.id ? 'Wirklich?' : 'Entfernen') + '</button></div>';
+    }).join('');
+  }
+  function calInner() {
+    var url = feedUrl();
+    return head('Kalender', '', 'Fertig') +
+      '<div class="sec-h"><span>Effectra in deinem Kalender</span></div>' +
+      (CAL.feed
+        ? '<div class="group"><div class="f row"><input id="cal-url" type="text" readonly value="' + esc(url) + '" aria-label="Dein Abo-Link"></div>' +
+          '<button type="button" class="row-btn accent" data-action="cal-copy"><span class="grow">Link kopieren</span></button>' +
+          '<button type="button" class="row-btn accent" data-action="cal-sub"><span class="grow">In Kalender-App öffnen (iPhone, Mac, Outlook)</span></button></div>' +
+          '<div class="sec-h"><span>Welche Aufgaben?</span></div>' + segc({ list: [{ k: 'mine', l: 'Meine' }, { k: 'all', l: 'Ganzes Team' }], sel: CAL.feed.scope, action: 'cal-scope', label: 'Welche Aufgaben' }) +
+          '<p class="meta-line"><b>Google Kalender (am PC):</b> links bei „Weitere Kalender“ auf „+“ → „Per URL“ → Link einfügen. Der Link ist geheim: Wer ihn hat, sieht diese Aufgaben. Kalender-Apps holen Änderungen alle paar Stunden.</p>' +
+          '<div class="group"><button type="button" class="row-btn destructive" data-action="cal-reset">' + (S.armed === 'cal-reset' ? 'Wirklich? Der alte Link hört auf zu funktionieren' : 'Neuen Link erzeugen') + '</button></div>'
+        : '<div class="group"><button type="button" class="row-btn accent" data-action="cal-create"><span class="grow">Abo-Link erstellen</span></button></div>' +
+          '<p class="meta-line">Deine Aufgaben mit Datum erscheinen dann automatisch in Google Kalender, am iPhone oder in Outlook.</p>') +
+      '<div class="sec-h"><span>Deine Kalender in Effectra</span></div><div class="group" id="cal-links">' + calLinksHtml() + '</div>' +
+      '<div class="group" style="margin-top:12px"><div class="f row"><input id="cl-name" type="text" maxlength="60" autocomplete="off" placeholder="Name, z. B. Privat" aria-label="Name des Kalenders"></div>' +
+      '<div class="f row"><input id="cl-url" type="text" inputmode="url" autocomplete="off" spellcheck="false" placeholder="iCal-Adresse (https://… oder webcal://…)" aria-label="iCal-Adresse"></div>' +
+      '<button type="button" class="row-btn accent" data-action="cal-add"><span class="grow">Kalender hinzufügen</span></button></div>' +
+      '<div class="form-error" id="form-error" role="alert"></div>' +
+      '<p class="meta-line"><b>Google:</b> Kalender-Einstellungen → deinen Kalender anklicken → „Geheime Adresse im iCal-Format“ kopieren.<br><b>iPhone (iCloud):</b> Kalender-App → „Kalender“ → ⓘ neben dem Kalender → „Öffentlicher Kalender“ an → „Link teilen“.<br><b>Outlook:</b> Einstellungen → Kalender → Freigegebene Kalender → „Kalender veröffentlichen“ → ICS-Link.<br>Nur du siehst deine Termine – nicht dein Team.</p>';
+  }
+  function calSheet() { return wrapForm('cal-form', '', calInner()); }
+  function calRedraw() { var f = $('cal-form'); if (f && S.sheet && S.sheet.kind === 'cal') f.innerHTML = calInner(); }
+  function calErr(e) { var t = (e && e.user) || errText(e), fe = $('form-error'); if (fe) fe.textContent = t; else toast(t); }
+  function calCreate() {
+    run(S.sb.from('calendar_feeds').insert({ workspace_id: S.ws }).select('token,scope').single()).then(function (r) { CAL.feed = r; calRedraw(); toast('Abo-Link erstellt'); }, calErr);
+  }
+  function calReset() {
+    if (S.armed !== 'cal-reset') { S.armed = 'cal-reset'; calRedraw(); return; }
+    S.armed = null;
+    run(S.sb.from('calendar_feeds').delete().eq('workspace_id', S.ws).eq('user_id', S.uid)).then(function () {
+      return run(S.sb.from('calendar_feeds').insert({ workspace_id: S.ws, scope: CAL.feed ? CAL.feed.scope : 'mine' }).select('token,scope').single());
+    }).then(function (r) { CAL.feed = r; calRedraw(); toast('Neuer Link erstellt – bitte im Kalender neu eintragen'); }, calErr);
+  }
+  function calScope(v) {
+    if (!CAL.feed || (v !== 'mine' && v !== 'all')) return;
+    run(S.sb.from('calendar_feeds').update({ scope: v }).eq('workspace_id', S.ws).eq('user_id', S.uid).select('token,scope').single()).then(function (r) { CAL.feed = r; }, calErr);
+  }
+  function calAdd() {
+    var name = ($('cl-name').value || '').trim(), url = ($('cl-url').value || '').trim();
+    if (!url) { calErr({ user: 'Bitte die iCal-Adresse einfügen.' }); $('cl-url').focus(); return; }
+    if (!/^(https|webcal):\/\/[^\s]+$/i.test(url)) { calErr({ user: 'Die Adresse muss mit https:// oder webcal:// beginnen.' }); $('cl-url').focus(); return; }
+    if (!name) name = /google\.com/i.test(url) ? 'Google Kalender' : /icloud\.com/i.test(url) ? 'iCloud' : /outlook|office365|live\.com/i.test(url) ? 'Outlook' : 'Kalender';
+    var color = CAL_COLORS[(CAL.links || []).length % CAL_COLORS.length];
+    run(S.sb.from('calendar_links').insert({ name: name.slice(0, 60), url: url, color: color }).select('id,name,url,color').single()).then(function (r) {
+      CAL.links = (CAL.links || []).concat(r); CAL.ev = {}; calRedraw(); queue();
+      evFor(today(), addDays(today(), 1));
+      toast('Kalender hinzugefügt');
+    }, calErr);
+  }
+  function calDel(id) {
+    if (S.armed !== 'cal:' + id) { S.armed = 'cal:' + id; var b = $('cal-links'); if (b) b.innerHTML = calLinksHtml(); return; }
+    S.armed = null;
+    run(S.sb.from('calendar_links').delete().eq('id', id)).then(function () {
+      CAL.links = (CAL.links || []).filter(function (l) { return l.id !== id; }); CAL.ev = {}; calRedraw(); queue();
+    }, calErr);
   }
 
   /* ================= Schnellsuche (Strg+K) ================= */
@@ -2417,7 +2796,9 @@
     if (keepId) { var f = $(keepId); if (f) { f.focus(); try { f.setSelectionRange(caret, caret); } catch (e) {} } }
     if (count) countUp();
     if (S.ctx && !byId(S.tasks, S.ctx)) ctxClose();
-    focusTick(); timerTick();
+    focusTick(); timerTick(); musicUI();
+    calMeta();
+    if (!S.connInit) { S.connInit = true; setTimeout(connInit, 400); }
     if (!S.checked) { S.checked = true; setTimeout(checkGoal, 800); }
     if (!S.reminded) { S.reminded = true; setTimeout(dailyReminder, 1500); }
     if (!S.wnChecked) {
@@ -2638,6 +3019,7 @@
       '<div class="group" style="margin-top:12px"><button type="button" class="row-btn" data-action="toggle-sound"><span class="grow">Ton beim Abhaken</span><span class="muted" id="sound-state">' + (soundOn() ? 'An' : 'Aus') + '</span></button></div>' +
       '<div class="sec-h"><span>KI-Assistent</span></div><div class="group"><button type="button" class="row-btn" data-action="toggle-ai"><span class="grow">' + SPARK + ' KI-Funktionen anzeigen</span><span class="muted" id="ai-state">' + (aiOn() ? 'An' : 'Aus') + '</span></button></div>' +
       '<p class="meta-line">Die KI (Google Gemini) läuft nur, wenn du auf einen ✦-Knopf klickst. Dabei werden die betroffenen Aufgabentitel an Google geschickt – im Gratis-Tarif kann Google sie zur Verbesserung nutzen. Nichts Vertrauliches eintragen. Höchstens 100 Anfragen pro Person und Tag.</p>' +
+      connRows() +
       '<div class="sec-h"><span>Darstellung</span></div>' + segc({ list: THEMES, sel: theme(), action: 'theme', label: 'Design' }) +
       '<div class="group" style="margin-top:12px"><button type="button" class="row-btn" data-action="toggle-notify"><span class="grow">Benachrichtigungen</span><span class="muted" id="notify-state">' + (notifyOn() ? 'An' : 'Aus') + '</span></button></div>' +
       '<div class="sec-h"><span>Sicherung</span></div><div class="group">' +
@@ -2670,7 +3052,7 @@
     ctxClose(); closePalette();
     var html = kind === 'task' ? taskSheet(id) : kind === 'project' ? projectSheet(id) : kind === 'inbox' ? inboxSheet() : kind === 'trash' ? trashSheet()
       : kind === 'update' ? wrapForm('upd-form', '', updateInner()) : kind === 'whatsnew' ? whatsNewSheet() : kind === 'keys' ? keysSheet() : kind === 'chat' ? chatSheet() : kind === 'draft' ? draftSheet(id) :
-      kind === 'tpl' ? tplSheet(id) : kind === 'tpl-apply' ? tplApplySheet(id) : settingsSheet();
+      kind === 'tpl' ? tplSheet(id) : kind === 'tpl-apply' ? tplApplySheet(id) : kind === 'cal' ? calSheet() : kind === 'mail' ? mailSheet() : settingsSheet();
     if (!html) return;
     clearTimeout(S.closeTimer);
     S.armed = null; S.aiSubs = []; S.sheet = { kind: kind, id: id || '', updKey: kind === 'update' ? updKey() : '' }; S.last = document.activeElement; S.draftSubs = [];
@@ -2680,6 +3062,8 @@
     document.documentElement.classList.add('lock');
     if (kind === 'task') refreshSheet();
     if (kind === 'settings') loadBackups();
+    if (kind === 'cal') calMeta(true);
+    if (kind === 'mail') gmLoad(true);
     if (kind === 'trash') { refreshTrash(); loadTrash(); }
     if (kind === 'inbox') { markInboxRead(); renderChrome(); }
     if (kind === 'chat') { chatDraw(); var cq = $('chat-q'); if (cq && window.innerWidth >= 760) cq.focus(); }
@@ -2924,7 +3308,7 @@
         el.disabled = true;
         run(S.sb.from('workspace_members').delete().eq('workspace_id', S.ws).eq('user_id', S.uid)).then(function () { closeSheet(); ls(LS_WS, null); S.ws = null; unsubscribe(); start(); }, function (er) { el.disabled = false; formError(errText(er)); });
         break;
-      case 'logout': closeSheet(); unsubscribe(); S.sb.auth.signOut(); break;
+      case 'logout': closeSheet(); unsubscribe(); jset(LS_SP, null); jset(LS_GM, null); SP.now = null; GM.list = null; CAL.ws = null; S.sb.auth.signOut(); break;
       case 'retry': start(); break;
       case 'theme': switchTheme(el.dataset.seg); break;
       case 'side-toggle': toggleSide(); break;
@@ -2991,6 +3375,23 @@
       case 'update': openSheet('update'); break;
       case 'do-update': doUpdate(el); break;
       case 'upd-later': updLater(); break;
+      case 'cal-sheet': openSheet('cal'); break;
+      case 'cal-create': calCreate(); break;
+      case 'cal-reset': calReset(); break;
+      case 'cal-scope': calScope(el.dataset.seg); break;
+      case 'cal-copy': copyText(feedUrl(), 'Link kopiert'); break;
+      case 'cal-sub': if (feedUrl()) { if (DESK) window.open(feedUrl().replace(/^https:/, 'webcal:')); else location.href = feedUrl().replace(/^https:/, 'webcal:'); } break;
+      case 'cal-add': calAdd(); break;
+      case 'cal-del': calDel(id); break;
+      case 'sp-connect': spConnect(); break;
+      case 'sp-off': jset(LS_SP, null); SP.now = null; refreshConn(); toast('Spotify getrennt'); break;
+      case 'sp': spControl(el.dataset.cmd); break;
+      case 'sp-open': if (SP.now && /^https:\/\/open\.spotify\.com\//.test(SP.now.url)) openOut(SP.now.url); break;
+      case 'gm-connect': gmConnect(); break;
+      case 'gm-off': jset(LS_GM, null); GM.list = null; refreshConn(); toast('Gmail getrennt'); break;
+      case 'mail-all': openSheet('mail'); break;
+      case 'mail-task': mailTask(id); break;
+      case 'mail-open': var mo = (GM.list || []).filter(function (x) { return x.id === id; })[0]; if (mo) openOut(gmLink(mo)); break;
       case 'who-pick': if (!(S.pickJustClosed && Date.now() - S.pickJustClosed < 400)) whoPick(el); break;
       case 'check-update': manualCheck(); break;
       case 'whatsnew': openSheet('whatsnew'); break;

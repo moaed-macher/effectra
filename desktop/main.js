@@ -9,6 +9,7 @@ const APP_URL = "https://effectra.netlify.app/";
 const APP_ORIGIN = new URL(APP_URL).origin;
 const OFFLINE = path.join(__dirname, "offline.html");
 const OVERLAY_H = 48;
+const LOGIN_HOSTS = ["accounts.spotify.com", "accounts.google.com"];
 
 app.setAppUserModelId("app.effectra.desktop"); // nötig für Windows-Benachrichtigungen
 
@@ -135,9 +136,23 @@ function createWindow(forceShow) {
   win.webContents.on("did-navigate", (e, url) => { if (url.startsWith(APP_ORIGIN)) clearInterval(offlineTimer); });
 
   // Externe Links im normalen Browser öffnen, nie im App-Fenster
+  // Anmeldung bei Spotify/Google: kleines Fenster in der App (danach schließt es sich selbst).
+  // Alles andere öffnet im normalen Browser.
   win.webContents.setWindowOpenHandler(({ url }) => {
-    if (/^https:\/\//.test(url)) shell.openExternal(url);
+    let u = null;
+    try { u = new URL(url); } catch (e) { return { action: "deny" }; }
+    if (u.protocol === "https:" && LOGIN_HOSTS.includes(u.hostname)) {
+      return { action: "allow", overrideBrowserWindowOptions: {
+        width: 520, height: 720, parent: win, autoHideMenuBar: true, title: "Anmelden", backgroundColor: "#FFFFFF",
+        webPreferences: { contextIsolation: true, nodeIntegration: false, sandbox: true }
+      } };
+    }
+    if (u.protocol === "https:" || u.protocol === "webcal:") shell.openExternal(url);
     return { action: "deny" };
+  });
+  win.webContents.on("did-create-window", (child) => {
+    child.webContents.setWindowOpenHandler(() => ({ action: "deny" }));
+    child.webContents.on("will-navigate", (e, url) => { if (!/^https:\/\//.test(url)) e.preventDefault(); });
   });
   win.webContents.on("will-navigate", (e, url) => {
     if (url.startsWith(APP_ORIGIN + "/")) return;

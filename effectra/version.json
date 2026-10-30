@@ -1,9 +1,9 @@
 {
-  "version": "3.1.0",
+  "version": "3.2.0",
   "date": "2026-10-30",
   "notes": [
-    "Mehrere Zuständige: Eine Aufgabe kann jetzt mehreren Leuten gehören.",
-    "Neue Auswahllisten: schöner, klarer und mit Tastatur bedienbar – statt der grauen Windows-Liste.",
-    "Update-Symbol oben: zeigt, wenn ein Update lädt oder bereit ist. Du kannst weiterarbeiten – es wird beim Schließen installiert."
+    "Kalender: Deine Aufgaben erscheinen in Google Kalender, am iPhone oder in Outlook – und deine Termine in Effectra.",
+    "Spotify: Was gerade läuft, mit Pause und Weiter – direkt in Effectra.",
+    "Gmail: Ungelesene Mails auf „Heute“, aus jeder Mail wird mit einem Klick eine Aufgabe."
   ]
 }
