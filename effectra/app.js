@@ -4,11 +4,9 @@
 
   /* ================= Konstanten ================= */
   // Bei jeder Veröffentlichung erhöhen – gleich wie in version.json und den ?v= in index.html
-  var APP_VERSION = '3.3.0';
+  var APP_VERSION = '3.3.1';
   var CHANGES = [
-    'Spotify links in der Seitenleiste: Lieblingssongs, Playlists und Suche – mit einem Klick abspielen. Die Höhe kannst du unten ziehen.',
-    'Ohne offenes Spotify: Im Browser spielt Effectra selbst, im Windows-Programm startet Spotify automatisch.',
-    'Fokus-Modus: ruhige Vollbild-Ansicht, Windows-Benachrichtigungen stumm, am Ende mehrere kurze Töne.'
+    'Spotify: Es läuft jetzt genau der Song, den du anklickst – auch wenn in Spotify „Zufällig“ an ist. Er erscheint sofort oben.'
   ];
   var DESK = window.effectraDesktop || null; // nur in der Windows-App vorhanden
   if (DESK) document.documentElement.classList.add('desk');
@@ -1181,10 +1179,12 @@
       return r.json();
     }).then(function (j) {
       var it = j && j.item;
+      if (SP.want && Date.now() - SP.wantAt < 6000 && (!it || it.uri !== SP.want)) { setTimeout(function () { spPoll(true); }, 1000); return; }
+      SP.want = '';
       var big = ((it && it.album && it.album.images) || [])[1] || ((it && it.album && it.album.images) || [])[0];
       SP.now = it ? { title: String(it.name || ''), artist: (it.artists || []).map(function (x) { return x.name; }).join(', ') || (it.show && it.show.name) || '', img: spImg(it),
         big: big && /^https:\/\/[a-z0-9.-]+\.(scdn\.co|spotifycdn\.com)\//i.test(big.url) ? big.url : '', playing: !!j.is_playing, url: it.external_urls && it.external_urls.spotify || '',
-        pos: Number(j.progress_ms) || 0, dur: Number(it.duration_ms) || 0, at: Date.now() } : null;
+        pos: Number(j.progress_ms) || 0, dur: Number(it.duration_ms) || 0, at: Date.now(), uri: String(it.uri || '') } : null;
       SP.err = ''; musicUI(); mdNow();
     }, function (e) { SP.err = e && e.message === 'off' ? '' : 'x'; musicUI(); mdNow(); });
   }
@@ -1462,13 +1462,26 @@
     }, 320);
   }
   // Abspielen: erst normal, sonst ein Gerät finden bzw. starten
-  function spPlay(body, deviceId) {
+  // fallback: zweiter Versuch, falls Spotify den ersten Weg nicht annimmt (z. B. Lieblingssongs als Liste)
+  function spPlay(body, deviceId, fallback) {
     return spJson('PUT', '/me/player/play' + (deviceId ? '?device_id=' + encodeURIComponent(deviceId) : ''), body).then(function (r) {
-      if (r.status === 204 || r.status === 200 || r.status === 202) { setTimeout(function () { spPoll(true); }, 700); return; }
-      if (r.status === 403) { toast('Abspielen geht nur mit Spotify Premium.'); return; }
-      if (r.status === 404 && !deviceId) return spDevice().then(function (id) { if (id) return spPlay(body, id); });
+      if (r.status === 204 || r.status === 200 || r.status === 202) { setTimeout(function () { spPoll(true); }, 900); setTimeout(function () { spPoll(true); }, 2600); return; }
+      if (r.status === 403 && !(r.data && r.data.error && /restrict/i.test(r.data.error.reason || r.data.error.message || ''))) { SP.want = ''; toast('Abspielen geht nur mit Spotify Premium.'); return; }
+      if (r.status === 404 && !deviceId) return spDevice().then(function (id) { if (id) return spPlay(body, id, fallback); SP.want = ''; });
+      if (fallback) return spPlay(fallback, deviceId);
+      SP.want = ''; spPoll(true);
       toast('Spotify hat das gerade nicht angenommen.');
-    }, function () { toast('Spotify ist gerade nicht erreichbar.'); });
+    }, function () { SP.want = ''; toast('Spotify ist gerade nicht erreichbar.'); });
+  }
+  function spMeId() {
+    if (MD.me) return Promise.resolve(MD.me);
+    return spJson('GET', '/me').then(function (r) { MD.me = r.data && r.data.id ? String(r.data.id) : ''; return MD.me; }, function () { return ''; });
+  }
+  // Geklickten Song sofort oben zeigen, bis Spotify ihn bestätigt
+  function spShow(t) {
+    SP.want = t.uri; SP.wantAt = Date.now();
+    SP.now = { title: t.title, artist: t.sub, img: t.img, big: t.img, playing: true, url: '', pos: 0, dur: t.ms || 0, at: Date.now(), uri: t.uri };
+    musicUI(); mdNow();
   }
   function canSdk() { return !DESK && !!(finePtr && finePtr.matches) && !!navigator.requestMediaKeySystemAccess && !/iPhone|iPad|Android/i.test(navigator.userAgent); }
   function spDevices() { return spJson('GET', '/me/player/devices').then(function (r) { return (r.data && r.data.devices) || []; }, function () { return []; }); }
@@ -1516,17 +1529,25 @@
       document.head.appendChild(sc);
     });
   }
+  // Lieblingssongs: als Sammlung mit Startpunkt abspielen – so kommt genau der geklickte Song,
+  // auch wenn in Spotify „Zufällig“ an ist; danach geht es mit den Lieblingssongs weiter.
   function mdPlay(src, i) {
-    if (src === 'liked' && MD.liked && MD.liked[i]) spPlay({ uris: MD.liked.slice(i, i + 50).map(function (t) { return t.uri; }) });
-    else if (src === 'search' && MD.res && MD.res[i]) spPlay({ uris: [MD.res[i].uri] });
-    else if (src === 'lists' && MD.lists && MD.lists[i]) spPlay({ context_uri: MD.lists[i].uri });
+    var t = src === 'liked' ? MD.liked && MD.liked[i] : src === 'search' ? MD.res && MD.res[i] : null;
+    if (t) {
+      spShow(t);
+      if (src === 'search') { spPlay({ uris: [t.uri] }); return; }
+      spMeId().then(function (me) {
+        if (me) spPlay({ context_uri: 'spotify:user:' + me + ':collection', offset: { uri: t.uri } }, null, { uris: [t.uri] });
+        else spPlay({ uris: [t.uri] });
+      });
+    } else if (src === 'lists' && MD.lists && MD.lists[i]) { SP.want = ''; spPlay({ context_uri: MD.lists[i].uri }); }
   }
   function mdRows(list, src) {
     if (!list) return '<p class="md-empty">' + (MD.busy ? 'Lädt …' : '') + '</p>';
     if (!list.length) return '<p class="md-empty">' + (src === 'search' ? 'Nichts gefunden' : src === 'lists' ? 'Keine Playlists' : 'Noch keine Lieblingssongs') + '</p>';
-    var cur = SP.now && SP.now.title;
+    var cur = SP.now && SP.now.uri;
     return list.map(function (t, i) {
-      return '<button type="button" class="md-row' + (cur && t.title === cur ? ' on' : '') + '" data-action="md-play" data-src="' + src + '" data-i="' + i + '">' +
+      return '<button type="button" class="md-row' + (cur && t.uri === cur ? ' on' : '') + '" data-action="md-play" data-src="' + src + '" data-i="' + i + '" data-uri="' + esc(t.uri) + '">' +
         (t.img ? '<img src="' + esc(t.img) + '" alt="" width="34" height="34" loading="lazy" referrerpolicy="no-referrer">' : '<span class="md-ph">' + IC.music + '</span>') +
         '<span class="md-tx"><b>' + esc(t.title) + '</b><span>' + esc(t.sub) + '</span></span></button>';
     }).join('');
@@ -1568,7 +1589,7 @@
     });
   }
   function mdList() { Array.prototype.forEach.call(mdRoots(), function (r) { var l = r.querySelector('[data-md="list"]'); if (l) l.innerHTML = mdListHtml(); }); }
-  function mdNow() { Array.prototype.forEach.call(mdRoots(), function (r) { var b = r.querySelector('[data-md="now"]'); if (b) b.innerHTML = mdNowHtml(); var l = r.querySelector('[data-md="list"]'); if (l && SP.now) Array.prototype.forEach.call(l.querySelectorAll('.md-row'), function (x) { x.classList.toggle('on', x.querySelector('b').textContent === SP.now.title); }); }); }
+  function mdNow() { Array.prototype.forEach.call(mdRoots(), function (r) { var b = r.querySelector('[data-md="now"]'); if (b) b.innerHTML = mdNowHtml(); var l = r.querySelector('[data-md="list"]'); if (l && SP.now) Array.prototype.forEach.call(l.querySelectorAll('.md-row'), function (x) { x.classList.toggle('on', !!SP.now.uri && x.dataset.uri === SP.now.uri); }); }); }
   function spPos() { var n = SP.now; if (!n) return 0; return Math.min(n.dur || 0, (n.pos || 0) + (n.playing ? Date.now() - (n.at || Date.now()) : 0)); }
   setInterval(function () {
     if (!SP.now || !SP.now.playing) return;

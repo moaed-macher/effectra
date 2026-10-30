@@ -1,9 +1,7 @@
 {
-  "version": "3.3.0",
+  "version": "3.3.1",
   "date": "2026-10-30",
   "notes": [
-    "Spotify links in der Seitenleiste: Lieblingssongs, Playlists und Suche – mit einem Klick abspielen. Die Höhe kannst du unten ziehen.",
-    "Ohne offenes Spotify: Im Browser spielt Effectra selbst, im Windows-Programm startet Spotify automatisch.",
-    "Fokus-Modus: ruhige Vollbild-Ansicht, Windows-Benachrichtigungen stumm, am Ende mehrere kurze Töne."
+    "Spotify: Es läuft jetzt genau der Song, den du anklickst – auch wenn in Spotify „Zufällig“ an ist. Er erscheint sofort oben."
   ]
 }
