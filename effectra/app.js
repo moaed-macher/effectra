@@ -4,11 +4,9 @@
 
   /* ================= Konstanten ================= */
   // Bei jeder Veröffentlichung erhöhen – gleich wie in version.json und den ?v= in index.html
-  var APP_VERSION = '3.2.0';
+  var APP_VERSION = '3.2.1';
   var CHANGES = [
-    'Kalender: Deine Aufgaben erscheinen in Google Kalender, am iPhone oder in Outlook – und deine Termine in Effectra.',
-    'Spotify: Was gerade läuft, mit Pause und Weiter – direkt in Effectra.',
-    'Gmail: Ungelesene Mails auf „Heute“, aus jeder Mail wird mit einem Klick eine Aufgabe.'
+    'Spotify ist eingerichtet: Einstellungen → Verbindungen → Spotify → Verbinden.'
   ];
   var DESK = window.effectraDesktop || null; // nur in der Windows-App vorhanden
   if (DESK) document.documentElement.classList.add('desk');

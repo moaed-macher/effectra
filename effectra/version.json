@@ -1,9 +1,7 @@
 {
-  "version": "3.2.0",
+  "version": "3.2.1",
   "date": "2026-10-30",
   "notes": [
-    "Kalender: Deine Aufgaben erscheinen in Google Kalender, am iPhone oder in Outlook – und deine Termine in Effectra.",
-    "Spotify: Was gerade läuft, mit Pause und Weiter – direkt in Effectra.",
-    "Gmail: Ungelesene Mails auf „Heute“, aus jeder Mail wird mit einem Klick eine Aufgabe."
+    "Spotify ist eingerichtet: Einstellungen → Verbindungen → Spotify → Verbinden."
   ]
 }

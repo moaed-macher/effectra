@@ -7,6 +7,6 @@ window.EFFECTRA_CONFIG = {
   supabaseUrl: "https://pbvrgvokfsribeiecibf.supabase.co",
   supabaseAnonKey: "sb_publishable_NHpVeo3X9MJfbDRFxHfEQg_jf2ercOU",
   // Verbindungen (öffentliche Kennungen, keine Geheimnisse). Leer = noch nicht eingerichtet.
-  spotifyClientId: "",
+  spotifyClientId: "2f613639d2b0423f9bb9321ce8c00a7e",
   googleClientId: ""
 };
