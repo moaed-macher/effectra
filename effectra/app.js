@@ -4,10 +4,11 @@
 
   /* ================= Konstanten ================= */
   // Bei jeder Veröffentlichung erhöhen – gleich wie in version.json und den ?v= in index.html
-  var APP_VERSION = '3.0.1';
+  var APP_VERSION = '3.1.0';
   var CHANGES = [
-    'Fehler behoben: Die App blieb beim zweiten Öffnen bei „Keine Verbindung“ hängen.',
-    'Effectra lädt jetzt keine Dateien mehr von fremden Servern – schneller und sicherer.'
+    'Mehrere Zuständige: Eine Aufgabe kann jetzt mehreren Leuten gehören.',
+    'Neue Auswahllisten: schöner, klarer und mit Tastatur bedienbar – statt der grauen Windows-Liste.',
+    'Update-Symbol oben: zeigt, wenn ein Update lädt oder bereit ist. Du kannst weiterarbeiten – es wird beim Schließen installiert.'
   ];
   var DESK = window.effectraDesktop || null; // nur in der Windows-App vorhanden
   if (DESK) document.documentElement.classList.add('desk');
@@ -284,7 +285,7 @@
     var rows = [['Titel', 'Status', 'Priorität', 'Fällig', 'Projekt', 'Zuständig', 'Unteraufgaben', 'Notizen', 'Angelegt', 'Erledigt']];
     S.tasks.slice().sort(sortActive).forEach(function (t) {
       var p = t.project_id ? byId(S.projects, t.project_id) : null, subs = subsOf(t.id);
-      rows.push([t.title, SL[t.status] || t.status, (PRIO[(t.priority || 2) - 1] || PRIO[1]).l, t.due || '', p ? p.name : '', t.assignee ? who(t.assignee).name : '',
+      rows.push([t.title, SL[t.status] || t.status, (PRIO[(t.priority || 2) - 1] || PRIO[1]).l, t.due || '', p ? p.name : '', peopleOf(t).map(function (id) { return who(id).name; }).join(', '),
         subs.length ? subs.filter(function (s) { return s.done; }).length + '/' + subs.length : '', t.notes || '', t.created_at ? ymd(new Date(t.created_at)) : '', t.done_at ? ymd(new Date(t.done_at)) : '']);
     });
     var csv = '﻿' + rows.map(function (r) { return r.map(csvCell).join(';'); }).join('\r\n');
@@ -313,6 +314,20 @@
   function avatar(id, size) {
     var w = who(id);
     return '<span class="av ' + (size || '') + '" style="--c:var(--c-' + COLORS[hash(id) % 7] + ')" aria-hidden="true">' + esc(initials(w.name)) + '</span>';
+  }
+  // Mehrere Zuständige: assignee = Hauptperson, helpers = weitere
+  function peopleOf(t) {
+    var a = t && t.assignee ? [t.assignee] : [];
+    ((t && t.helpers) || []).forEach(function (h) { if (h && a.indexOf(h) < 0) a.push(h); });
+    return a;
+  }
+  function hasPerson(t, id) { return !!t && !!id && (t.assignee === id || ((t.helpers || []).indexOf(id) >= 0)); }
+  function namesOf(t) { return peopleOf(t).map(function (id) { return who(id).first; }).join(', '); }
+  function avatars(t, size) {
+    var p = peopleOf(t);
+    if (p.length < 2) return p.length ? avatar(p[0], size) : '';
+    return '<span class="avs" title="' + esc(namesOf(t)) + '">' + p.slice(0, 3).map(function (id) { return avatar(id, size); }).join('') +
+      (p.length > 3 ? '<span class="av more ' + (size || '') + '" aria-hidden="true">+' + (p.length - 3) + '</span>' : '') + '</span>';
   }
   function memberRole(id) { for (var i = 0; i < S.members.length; i++) if (S.members[i].user_id === id) return S.members[i].role; return null; }
   function currentWs() { return byId(S.workspaces, S.ws); }
@@ -648,7 +663,7 @@
       '<button type="button" class="main" data-action="open-task" data-id="' + esc(t.id) + '"><span class="txt"><span class="ttl">' +
       (t.priority === 3 ? '<span class="prio" title="Hohe Priorität">! </span>' : '') + esc(t.title) + '</span>' +
       (parts.length ? '<span class="sub">' + parts.join('') + '</span>' : '') + '</span>' +
-      (t.assignee ? avatar(t.assignee, 's') : '') + '</button></div>';
+      avatars(t, 's') + '</button></div>';
   }
   function group(list) { return '<div class="group">' + list.map(function (t) { return row(t); }).join('') + '</div>'; }
   function quickAdd() {
@@ -786,7 +801,7 @@
     // Auslastung im Team oder anstehende Projekt-Deadlines
     var side = '';
     if (!mine && S.members.length > 1) {
-      var load = S.members.map(function (m) { return { id: m.user_id, n: S.tasks.filter(function (t) { return t.assignee === m.user_id && t.status !== 'erledigt'; }).length }; })
+      var load = S.members.map(function (m) { return { id: m.user_id, n: S.tasks.filter(function (t) { return hasPerson(t, m.user_id) && t.status !== 'erledigt'; }).length }; })
         .sort(function (a, b) { return b.n - a.n; });
       var mx = Math.max(1, load[0] ? load[0].n : 1);
       side = '<section class="widget"><div class="w-head"><span class="w-title">Auslastung</span><span class="w-sub">offene Aufgaben</span></div><div class="loadlist">' +
@@ -940,7 +955,7 @@
       '<div class="code-line"><span class="code" id="invite-code">' + esc(shown) + '</span><button class="btn-t" type="button" data-action="copy-code" style="height:44px">Kopieren</button>' +
       (owner ? '<button class="txt-btn small" type="button" data-action="rotate-code">Neuen Code erzeugen</button>' : '') + '</div></section>';
     var members = S.members.slice().sort(function (a, b) { return a.role === 'owner' ? -1 : b.role === 'owner' ? 1 : (a.joined_at < b.joined_at ? -1 : 1); }).map(function (m) {
-      var w = who(m.user_id), st = stats(S.tasks.filter(function (t) { return t.assignee === m.user_id; }));
+      var w = who(m.user_id), st = stats(S.tasks.filter(function (t) { return hasPerson(t, m.user_id); }));
       var kick = owner && m.user_id !== S.uid ? '<button type="button" class="txt-btn small danger" data-action="kick" data-id="' + esc(m.user_id) + '">' + (S.armed === 'kick:' + m.user_id ? 'Wirklich?' : 'Entfernen') + '</button>' : '';
       return '<div class="row person">' + avatar(m.user_id, 'l') + '<div class="txt"><div class="p-name"><b>' + esc(w.label) + (m.role === 'owner' ? '<span class="badge">Besitzer</span>' : '') + '</b><span>' + st.done + ' von ' + st.total + '</span></div>' + pbar(st.pct) +
         '<span class="sub"><span class="it">' + st.open + ' offen · ' + st.work + ' in Arbeit · ' + st.done + ' erledigt</span></span></div>' + kick + '</div>';
@@ -1120,16 +1135,16 @@
     });
   }
   function notifyChange(table, ev, row, prev) {
-    if (table === 'tasks' && row.assignee === S.uid && row.workspace_id === S.ws) {
+    if (table === 'tasks' && hasPerson(row, S.uid) && row.workspace_id === S.ws) {
       var recent = S.mine[row.id] && Date.now() - S.mine[row.id] < 8000;
-      if (!recent && ((ev === 'INSERT' && row.created_by !== S.uid && !row.repeat) || (ev === 'UPDATE' && prev && prev.assignee !== S.uid))) {
+      if (!recent && ((ev === 'INSERT' && row.created_by !== S.uid && !row.repeat) || (ev === 'UPDATE' && prev && !hasPerson(prev, S.uid)))) {
         toastIfOpen('Dir wurde „' + row.title + '“ zugewiesen');
         notify('Neue Aufgabe für dich', row.title, row.id);
       }
     }
     if (table === 'activity' && ev === 'INSERT' && row.actor && row.actor !== S.uid) {
       var t = row.task_id ? byId(S.tasks, row.task_id) : null;
-      var relevant = t && (t.assignee === S.uid || t.created_by === S.uid);
+      var relevant = t && (hasPerson(t, S.uid) || t.created_by === S.uid);
       var name = who(row.actor).first;
       if (row.kind === 'mention' && row.target === S.uid) { notify(name + ' hat dich erwähnt', row.title, row.task_id); toastIfOpen(name + ' hat dich in „' + row.title + '“ erwähnt'); }
       else if (row.kind === 'mention') return;
@@ -1260,8 +1275,8 @@
       if (a.kind === 'joined' || a.kind === 'restored') return true;
       var t = a.task_id ? byId(S.tasks, a.task_id) : null;
       if (!t) return false;
-      if (a.kind === 'created') return t.assignee === S.uid;
-      return (t.assignee === S.uid || t.created_by === S.uid) && /^(comment|done|started|reopened|restored_task)$/.test(a.kind);
+      if (a.kind === 'created') return hasPerson(t, S.uid);
+      return (hasPerson(t, S.uid) || t.created_by === S.uid) && /^(comment|done|started|reopened|restored_task)$/.test(a.kind);
     });
   }
   function unreadCount() { var lr = lastRead(); return inboxItems().filter(function (a) { return a.id > lr; }).length; }
@@ -1347,14 +1362,16 @@
   function refreshUpd() {
     var u = updReady(), pill = $('upd-pill'), card = $('side-upd');
     if (pill) {
-      pill.hidden = !u;
-      var ph = u ? '<i></i><span>' + (u.kind === 'desk' ? 'Neu starten' : 'Update') + '</span>' : '';
+      var dd = S.deskUpd, dl = !u && dd && dd.state === 'downloading', pct = dl ? Math.max(0, Math.min(100, Number(dd.percent) || 0)) : 0;
+      pill.hidden = !u && !dl;
+      pill.classList.toggle('dl', !!dl);
+      var ph = u ? '<i></i><span>Update bereit</span>' : dl ? '<b class="ring" style="--p:' + pct + '%"></b><span>Update ' + pct + ' %</span>' : '';
       if (pill.innerHTML !== ph) pill.innerHTML = ph;
-      pill.title = u ? 'Effectra ' + u.version + ' installieren' : '';
+      pill.title = u ? 'Effectra ' + u.version + ' ist bereit – ' + (u.kind === 'desk' ? 'wird beim Schließen installiert' : 'kommt beim nächsten Öffnen') : dl ? 'Update wird im Hintergrund geladen' : '';
     }
     if (card) {
       card.hidden = !u;
-      var ch = u ? '<b>Effectra ' + esc(u.version) + '</b><span>' + (u.kind === 'desk' ? 'Bereit – einmal neu starten' : 'Neue Version verfügbar') + '</span><button type="button" data-action="update">' + (u.kind === 'desk' ? 'Neu starten' : 'Aktualisieren') + '</button>' : '';
+      var ch = u ? '<b>Effectra ' + esc(u.version) + '</b><span>' + (u.kind === 'desk' ? (deskCloses() ? 'Wird beim Schließen installiert' : 'Wird beim Beenden installiert') : 'Kommt beim nächsten Öffnen') + '</span><button type="button" data-action="update">' + (u.kind === 'desk' ? 'Jetzt neu starten' : 'Jetzt aktualisieren') + '</button>' : '';
       if (card.innerHTML !== ch) card.innerHTML = ch;
     }
     var us = $('upd-state'); if (us) us.textContent = updStateText();
@@ -1372,14 +1389,23 @@
     var u = updReady(), d = S.deskUpd, body;
     if (u) {
       body = updHero('Effectra ' + u.version, u.kind === 'desk' ? 'Bereit zur Installation' : 'Neue Version verfügbar') + notesList(u.kind === 'web' ? u.notes : (S.webUpd && S.webUpd.notes)) +
-        '<button type="button" class="btn-p block" data-action="do-update">' + (u.kind === 'desk' ? 'Neu starten und installieren' : 'Jetzt aktualisieren') + '</button>' +
-        '<p class="meta-line">Deine Daten bleiben erhalten. Das dauert nur ein paar Sekunden.</p>';
+        '<button type="button" class="btn-p block" data-action="do-update">' + (u.kind === 'desk' ? 'Jetzt neu starten' : 'Jetzt aktualisieren') + '</button>' +
+        '<button type="button" class="btn-t block upd-later" data-action="upd-later">' + (u.kind === 'desk' ? 'Später – beim Schließen' : 'Später – beim nächsten Öffnen') + '</button>' +
+        '<p class="meta-line">' + (u.kind === 'desk' ? (deskCloses() ? 'Du kannst einfach weiterarbeiten. Wenn du Effectra schließt, wird das Update automatisch installiert.' : 'Du kannst einfach weiterarbeiten. Wenn du Effectra beendest (Rechtsklick auf das Symbol unten rechts → Beenden), wird das Update automatisch installiert.')
+          : 'Du kannst einfach weiterarbeiten. Beim nächsten Öffnen ist die neue Version automatisch da.') + ' Deine Daten bleiben erhalten.</p>';
     } else if (d && d.state === 'downloading') {
       body = updHero('Update wird geladen', 'Version ' + (d.version || '') + ' – läuft im Hintergrund, du kannst weiterarbeiten.') + '<div class="upd-prog" id="upd-prog" style="--p:' + (d.percent || 0) + '%"><i></i></div>';
     } else {
       body = updHero('Alles aktuell', 'Du hast die neueste Version von Effectra (' + APP_VERSION + ').');
     }
     return head('Update', '', u ? 'Später' : 'Fertig') + body;
+  }
+  // Ab Windows-Programm 3.1 installiert das Schließen des Fensters ein fertiges Update
+  function deskCloses() { return !!(S.deskInfo && S.deskInfo.version && cmpVer(String(S.deskInfo.version), '3.1.0') >= 0); }
+  function updLater() {
+    var u = updReady();
+    closeSheet();
+    if (u) toast(u.kind === 'desk' ? (deskCloses() ? 'Alles klar – wird beim Schließen installiert' : 'Alles klar – wird beim Beenden installiert') : 'Alles klar – kommt beim nächsten Öffnen');
   }
   function doUpdate(btn) {
     var u = updReady();
@@ -1418,7 +1444,7 @@
       '<div class="ctx-lbl">Priorität</div><div class="ctx-chips">' + PRIO.slice().reverse().map(function (p) {
         return '<button type="button" data-action="ctx-prio" data-p="' + p.k + '" class="' + ((t.priority || 2) === p.k ? 'on' : '') + '">' + p.l + '</button>';
       }).join('') + '</div><div class="ctx-sep"></div>' +
-      (t.assignee !== S.uid ? ctxItem('ctx-me', I.user, 'Mir zuweisen') : '') +
+      (!hasPerson(t, S.uid) ? ctxItem('ctx-me', I.user, t.assignee ? 'Mich dazunehmen' : 'Mir zuweisen') : '') +
       ctxItem('ctx-dup', I.copy, 'Duplizieren') +
       '<div class="ctx-sep"></div>' + ctxItem('ctx-del', I.trash, 'Löschen', '', 'danger');
     el.hidden = false; S.ctx = id;
@@ -1504,7 +1530,7 @@
   var LS_GOAL = 'effectra.goal', LS_SOUND = 'effectra.sound', LS_GOALDAY = 'effectra.goalday';
   function goal() { var g = Number(ls(LS_GOAL)); return g >= 1 && g <= 20 ? g : 3; }
   function soundOn() { return ls(LS_SOUND) === '1'; } // standardmäßig aus
-  function isMine(t) { return t.assignee === S.uid || (!t.assignee && (S.members.length <= 1 || t.created_by === S.uid)); }
+  function isMine(t) { return hasPerson(t, S.uid) || (!t.assignee && (S.members.length <= 1 || t.created_by === S.uid)); }
   function doneToday() { var t0 = today(); return S.tasks.filter(function (t) { return isMine(t) && t.status === 'erledigt' && t.done_at && ymd(new Date(t.done_at)) === t0; }).length; }
 
   var audio = null;
@@ -1580,7 +1606,7 @@
 
   function duplicateTask(id) {
     var t = byId(S.tasks, id); if (!t) return;
-    var data = { workspace_id: S.ws, title: (t.title + ' (Kopie)').slice(0, 200), notes: t.notes || '', project_id: t.project_id, assignee: t.assignee, status: 'offen', priority: t.priority, due: t.due, repeat: t.repeat || '' };
+    var data = { workspace_id: S.ws, title: (t.title + ' (Kopie)').slice(0, 200), notes: t.notes || '', project_id: t.project_id, assignee: t.assignee, helpers: t.helpers || [], status: 'offen', priority: t.priority, due: t.due, repeat: t.repeat || '' };
     var subs = subsOf(id);
     run(S.sb.from('tasks').insert(data).select().single()).then(function (row) {
       upsert('tasks', row);
@@ -1717,7 +1743,7 @@
           '<span class="td c-priority">' + esc((PRIO[(t.priority || 2) - 1] || PRIO[1]).l) + '</span>' +
           '<span class="td c-due' + (late ? ' bad' : '') + '">' + (t.due ? esc(dueLabel(t.due)) : '–') + '</span>' +
           '<span class="td c-project">' + (p ? '<i class="dot" style="--c:var(--c-' + colorOf(p.color) + ')"></i>' + esc(p.name) : '–') + '</span>' +
-          '<span class="td c-assignee">' + (t.assignee ? avatar(t.assignee, 'xs') + esc(who(t.assignee).first) : '–') + '</span>' +
+          '<span class="td c-assignee">' + (t.assignee ? avatars(t, 'xs') + esc(namesOf(t)) : '–') + '</span>' +
           '<span class="td c-time">' + (ms ? fmtDur(ms) : '–') + '</span></div>';
       }).join('') + '</div>';
   }
@@ -1785,7 +1811,7 @@
     // Team
     var teamW = '<section class="widget"><div class="w-head"><span class="w-title">Team</span><span class="w-sub">30 Tage</span></div><div class="rep-team"><div class="rt-h"><span></span><span>Erledigt</span><span>Offen</span><span>Überfällig</span><span>Zeit</span></div>' +
       S.members.map(function (m) {
-        var mine = S.tasks.filter(function (t) { return t.assignee === m.user_id; }), op = mine.filter(function (t) { return t.status !== 'erledigt'; });
+        var mine = S.tasks.filter(function (t) { return hasPerson(t, m.user_id); }), op = mine.filter(function (t) { return t.status !== 'erledigt'; });
         var d30 = mine.filter(function (t) { return t.status === 'erledigt' && t.done_at && ymd(new Date(t.done_at)) >= from30; }).length;
         var ms = totalMs(S.time_entries.filter(function (e) { return e.user_id === m.user_id && ymd(new Date(e.started_at)) >= from30; }));
         return '<div class="rt-r"><span class="rt-n">' + avatar(m.user_id, 's') + esc(who(m.user_id).first) + '</span><b>' + d30 + '</b><b>' + op.length + '</b><b class="' + (op.some(function (t) { return t.due && t.due < t0; }) ? 'bad' : '') + '">' + op.filter(function (t) { return t.due && t.due < t0; }).length + '</b><b>' + (ms ? fmtDur(ms) : '–') + '</b></div>';
@@ -1834,7 +1860,7 @@
   }
   function taskBrief(t) {
     var p = t.project_id ? byId(S.projects, t.project_id) : null;
-    return { title: t.title, due: t.due, priority: t.priority, status: t.status, project: p ? p.name : '', assignee: t.assignee ? who(t.assignee).first : '' };
+    return { title: t.title, due: t.due, priority: t.priority, status: t.status, project: p ? p.name : '', assignee: namesOf(t) };
   }
   function strList(v, max, len) { return (Array.isArray(v) ? v : []).map(function (x) { return String(x == null ? '' : x).trim().slice(0, len); }).filter(Boolean).slice(0, max); }
 
@@ -2419,20 +2445,35 @@
     return '<div class="backdrop" data-action="close-sheet"></div><form class="panel" id="' + id + '" data-id="' + esc(dataId || '') + '" novalidate role="dialog" aria-modal="true" aria-labelledby="sheet-title">' + inner + '</form>';
   }
 
+  function whoLabel(ids) {
+    ids = ids.filter(function (id) { return memberRole(id); });
+    if (!ids.length) return '<span class="dim">Niemand</span>';
+    var names = ids.map(function (id) { return id === S.uid ? 'Ich' : who(id).first; });
+    return '<span class="avs">' + ids.slice(0, 3).map(function (id) { return avatar(id, 'xs'); }).join('') + '</span><span class="who-n">' + esc(names.length > 3 ? names.slice(0, 2).join(', ') + ' +' + (names.length - 2) : names.join(', ')) + '</span>';
+  }
+  function whoPick(btn) {
+    var inp = $('t-who');
+    if (!inp) return;
+    var items = S.members.map(function (m) { return { k: m.user_id, l: who(m.user_id).label }; });
+    pickMulti(btn, items, inp.value.split(',').filter(Boolean), function (ids) {
+      inp.value = ids.join(',');
+      var v = $('t-who-val'); if (v) v.innerHTML = whoLabel(ids);
+    });
+  }
   function taskSheet(id) {
     var t = id ? byId(S.tasks, id) : null;
     if (id && !t) return '';
     var v = t || Object.assign({ title: '', notes: '', status: S.tab === 'board' ? S.boardStatus : 'offen', priority: 2, due: '', project_id: S.filterProject || '', assignee: S.uid }, S.preset || {});
     S.preset = null;
     var projects = [{ k: '', l: 'Ohne Projekt' }].concat(S.projects.filter(function (p) { return !p.archived || p.id === v.project_id; }).sort(byName).map(function (p) { return { k: p.id, l: p.name }; }));
-    var people = [{ k: '', l: 'Niemand' }].concat(S.members.map(function (m) { return { k: m.user_id, l: who(m.user_id).label }; }));
     var meta = t ? '<p class="meta-line">Angelegt ' + (t.created_by ? 'von ' + esc(who(t.created_by).name) + ' ' : '') + esc(ago(t.created_at)) + (t.done_at ? ' · erledigt ' + esc(ago(t.done_at)) : '') + '</p>' : '';
     return wrapForm('task-form', id, head(t ? 'Aufgabe' : 'Neue Aufgabe', t ? 'Sichern' : 'Hinzufügen') +
       '<div class="group first"><div class="f row"><input id="t-title" type="text" maxlength="200" autocomplete="off" placeholder="Titel" aria-label="Titel" value="' + esc(v.title) + '"></div>' +
       '<div class="f row"><textarea id="t-notes" rows="3" maxlength="5000" placeholder="Notizen" aria-label="Notizen">' + esc(v.notes) + '</textarea></div></div>' +
       '<div class="group" style="margin-top:18px">' +
       '<label class="f row" for="t-project"><span class="lbl">Projekt</span><span class="val"><select id="t-project">' + opts(projects, v.project_id || '') + '</select><i class="chev"></i></span></label>' +
-      '<label class="f row" for="t-assignee"><span class="lbl">Zuständig</span><span class="val"><select id="t-assignee">' + opts(people, v.assignee || '') + '</select><i class="chev"></i></span></label>' +
+      '<button type="button" class="f row who-row" id="t-who-btn" data-action="who-pick" aria-haspopup="listbox"><span class="lbl">Zuständig</span><span class="val"><span class="who-val" id="t-who-val">' + whoLabel(peopleOf(v)) + '</span><i class="chev"></i></span></button>' +
+      '<input type="hidden" id="t-who" value="' + esc(peopleOf(v).join(',')) + '">' +
       '<label class="f row" for="t-due"><span class="lbl">Fällig am</span><span class="val"><button type="button" class="txt-btn" id="clear-due" data-action="clear-due"' + (v.due ? '' : ' hidden') + '>Entfernen</button><input id="t-due" type="date" value="' + esc(v.due || '') + '"></span></label>' +
       '<label class="f row" for="t-remind"><span class="lbl">Erinnern um</span><span class="val"><button type="button" class="txt-btn" id="clear-remind" data-action="clear-remind"' + (v.remind_at ? '' : ' hidden') + '>Entfernen</button><input id="t-remind" type="time" value="' + esc(v.remind_at ? hhmm(v.remind_at) : (v.time || '')) + '"></span></label>' +
       '<label class="f row" for="t-repeat"><span class="lbl">Wiederholen</span><span class="val"><select id="t-repeat">' + opts(REPEAT, v.repeat || '') + '</select><i class="chev"></i></span></label></div>' +
@@ -2669,7 +2710,8 @@
     var g = function (id) { return form.querySelector('#' + id).value; };
     var title = g('t-title').trim();
     if (!title) { formError('Bitte einen Titel eingeben.'); form.querySelector('#t-title').focus(); return; }
-    var data = { title: title, notes: g('t-notes').trim(), project_id: g('t-project') || null, assignee: g('t-assignee') || null,
+    var whoIds = g('t-who').split(',').filter(function (x) { return x && memberRole(x); });
+    var data = { title: title, notes: g('t-notes').trim(), project_id: g('t-project') || null, assignee: whoIds[0] || null, helpers: whoIds.slice(1),
       status: g('t-status'), priority: Number(g('t-priority')), due: g('t-due') || null, repeat: g('t-repeat') || '' };
     var pend = $('lbl-new') && $('lbl-new').value.trim(); if (pend) addLabel(pend);
     data.labels = sheetLabels();
@@ -2854,7 +2896,7 @@
         S.armed = null;
         run(S.sb.from('workspace_members').delete().eq('workspace_id', S.ws).eq('user_id', id)).then(function () {
           S.members = S.members.filter(function (m) { return m.user_id !== id; });
-          S.tasks.forEach(function (t) { if (t.assignee === id) t.assignee = null; });
+          S.tasks.forEach(function (t) { if (t.assignee === id) t.assignee = null; if (t.helpers) t.helpers = t.helpers.filter(function (h) { return h !== id; }); });
           toast('Mitglied entfernt'); render();
         }, function (er) { toast(errText(er)); render(); });
         break;
@@ -2948,6 +2990,8 @@
       case 'trash-empty': if (S.armed !== 'trash-empty') { S.armed = 'trash-empty'; refreshTrash(); break; } trashPurge(null); break;
       case 'update': openSheet('update'); break;
       case 'do-update': doUpdate(el); break;
+      case 'upd-later': updLater(); break;
+      case 'who-pick': if (!(S.pickJustClosed && Date.now() - S.pickJustClosed < 400)) whoPick(el); break;
       case 'check-update': manualCheck(); break;
       case 'whatsnew': openSheet('whatsnew'); break;
       case 'keys': openSheet('keys'); break;
@@ -2958,7 +3002,7 @@
         break;
       case 'ctx-due': var cd = S.ctx, dd = el.dataset.d || null; ctxClose(); patchTask(cd, { due: dd }, dd ? 'Fällig: ' + dueLabel(dd) : 'Datum entfernt'); break;
       case 'ctx-prio': var cp = S.ctx, pv = Number(el.dataset.p) || 2; ctxClose(); patchTask(cp, { priority: pv }, 'Priorität: ' + PRIO[pv - 1].l); break;
-      case 'ctx-me': var cm2 = S.ctx; ctxClose(); patchTask(cm2, { assignee: S.uid }, 'Dir zugewiesen'); break;
+      case 'ctx-me': var cm2 = S.ctx, tm2 = byId(S.tasks, cm2); ctxClose(); patchTask(cm2, tm2 && tm2.assignee ? { helpers: (tm2.helpers || []).concat(S.uid) } : { assignee: S.uid }, tm2 && tm2.assignee ? 'Du bist jetzt mit dabei' : 'Dir zugewiesen'); break;
       case 'ctx-dup': var cdup = S.ctx; ctxClose(); duplicateTask(cdup); break;
       case 'ctx-del': var cdel = S.ctx; ctxClose(); deleteTask(cdel); break;
       case 'toggle-notify': toggleNotify(); break;
@@ -3211,5 +3255,121 @@
       if (uid !== S.uid) { S.uid = uid; setTimeout(start, 0); }
     });
   }
+  // Eigene Auswahlliste statt der grauen Windows-Liste (mit Maus/Trackpad).
+  // Am Handy bleibt die gewohnte Auswahl des Systems (iPhone-Rad).
+  var finePtr = window.matchMedia ? window.matchMedia('(pointer: fine)') : null;
+  var pick = null;
+  function pickable(t) { return t && t.tagName === 'SELECT' && !t.disabled && !t.multiple && finePtr && finePtr.matches; }
+  function pickItems() { return pick ? Array.prototype.slice.call(pick.el.querySelectorAll('.pick-it:not([disabled])')) : []; }
+  function pickOpen(sel) {
+    var o = Array.prototype.slice.call(sel.options);
+    if (!o.length) return;
+    pickShow(sel, o.map(function (x, i) {
+      return '<button type="button" role="option" class="pick-it' + (x.selected ? ' on' : '') + '" data-i="' + i + '" aria-selected="' + (x.selected ? 'true' : 'false') + '"' + (x.disabled ? ' disabled' : '') + '><span>' + esc(x.text) + '</span></button>';
+    }).join(''), null);
+  }
+  // Mehrfachauswahl (z. B. mehrere Zuständige): Häkchen an/aus, bleibt offen bis außerhalb geklickt wird
+  function pickMulti(anchor, items, chosen, apply) {
+    pickShow(anchor, '<div class="pick-h">Mehrere möglich – zuerst gewählt = Hauptperson</div>' + items.map(function (x, i) {
+      var on = chosen.indexOf(x.k) >= 0;
+      return '<button type="button" role="option" class="pick-it' + (on ? ' on' : '') + '" data-i="' + i + '" aria-selected="' + on + '"><span>' + esc(x.l) + '</span></button>';
+    }).join(''), { items: items, chosen: chosen.slice(), apply: apply });
+  }
+  function pickShow(sel, html, multi) {
+    pickClose();
+    var el = document.createElement('div');
+    el.className = 'pick' + (multi ? ' multi' : '');
+    el.setAttribute('role', 'listbox');
+    if (multi) el.setAttribute('aria-multiselectable', 'true');
+    el.innerHTML = html;
+    document.body.appendChild(el);
+    var r = sel.getBoundingClientRect(), vw = window.innerWidth, vh = window.innerHeight;
+    el.style.minWidth = Math.min(Math.max(190, Math.round(r.width)), 300) + 'px';
+    var w = el.offsetWidth, h = el.offsetHeight, below = vh - r.bottom - 10, above = r.top - 10;
+    var up = below < Math.min(h, 260) && above > below, maxH = Math.max(140, up ? above : below);
+    el.style.maxHeight = maxH + 'px';
+    h = Math.min(h, maxH);
+    var left = sel.closest('.val') || sel.classList.contains('who-row') ? r.right - w - (sel.classList.contains('who-row') ? 12 : 0) : r.left;
+    el.style.left = Math.round(Math.max(8, Math.min(left, vw - w - 8))) + 'px';
+    el.style.top = Math.round(Math.max(8, Math.min(up ? r.top - h - 6 : r.bottom + 6, vh - h - 8))) + 'px';
+    el.style.setProperty('--oy', up ? '100%' : '0%');
+    sel.classList.add('picking');
+    pick = { sel: sel, el: el, multi: multi };
+    var on = el.querySelector('.pick-it.on:not([disabled])') || pickItems()[0];
+    if (on) { on.focus({ preventScroll: true }); on.scrollIntoView({ block: 'nearest' }); }
+  }
+  function pickClose(back) {
+    if (!pick) return;
+    var p = pick; pick = null;
+    p.sel.classList.remove('picking');
+    if (p.el.parentNode) p.el.parentNode.removeChild(p.el);
+    if (back && document.contains(p.sel)) p.sel.focus({ preventScroll: true });
+  }
+  function pickChoose(i) {
+    if (!pick) return;
+    if (pick.multi) {
+      var m = pick.multi, k = m.items[i] && m.items[i].k, at = m.chosen.indexOf(k);
+      if (!k) return;
+      if (at >= 0) m.chosen.splice(at, 1); else m.chosen.push(k);
+      var b = pick.el.querySelector('.pick-it[data-i="' + i + '"]');
+      if (b) { b.classList.toggle('on', at < 0); b.setAttribute('aria-selected', at < 0 ? 'true' : 'false'); }
+      m.apply(m.chosen.slice());
+      return;
+    }
+    var sel = pick.sel;
+    pickClose(true);
+    if (!document.contains(sel) || sel.selectedIndex === i) return;
+    sel.selectedIndex = i;
+    sel.dispatchEvent(new Event('input', { bubbles: true }));
+    sel.dispatchEvent(new Event('change', { bubbles: true }));
+  }
+  document.addEventListener('mousedown', function (e) {
+    var t = e.target;
+    if (pick && pick.el.contains(t)) { e.preventDefault(); return; }
+    if (pick) { var same = t === pick.sel || (pick.sel.contains && pick.sel.contains(t)); pickClose(); if (same) { e.preventDefault(); e.stopPropagation(); S.pickJustClosed = Date.now(); return; } }
+    if (e.button === 0 && pickable(t)) { e.preventDefault(); t.focus({ preventScroll: true }); pickOpen(t); }
+  }, true);
+  document.addEventListener('click', function (e) {
+    if (pick && pick.el.contains(e.target)) {
+      var b = e.target.closest('.pick-it');
+      if (b && !b.disabled) pickChoose(Number(b.dataset.i));
+      return;
+    }
+    // Klick auf die ganze Zeile im Blatt (z. B. „Projekt“) öffnet die Liste
+    var row = e.target.closest && e.target.closest('label.row');
+    var sel = row && row.querySelector('select');
+    if (sel && e.target !== sel && pickable(sel)) { e.preventDefault(); sel.focus({ preventScroll: true }); pickOpen(sel); }
+  });
+  document.addEventListener('mouseover', function (e) {
+    if (!pick) return;
+    var b = e.target.closest && e.target.closest('.pick-it');
+    if (b && !b.disabled && pick.el.contains(b) && document.activeElement !== b) b.focus({ preventScroll: true });
+  });
+  window.addEventListener('keydown', function (e) {
+    if (!pick) {
+      var t = e.target;
+      if (pickable(t) && (e.key === 'Enter' || e.key === ' ' || e.key === 'F4' || (e.altKey && (e.key === 'ArrowDown' || e.key === 'ArrowUp')))) { e.preventDefault(); e.stopPropagation(); pickOpen(t); }
+      return;
+    }
+    var items = pickItems(), at = items.indexOf(document.activeElement), k = e.key;
+    if (k === 'Escape' || (pick.multi && k === 'Enter' && e.ctrlKey)) { e.preventDefault(); e.stopPropagation(); pickClose(true); }
+    else if (k === 'Tab') { e.preventDefault(); e.stopPropagation(); pickClose(true); }
+    else if (k === 'ArrowDown' || k === 'ArrowUp' || k === 'Home' || k === 'End') {
+      e.preventDefault(); e.stopPropagation();
+      var n = k === 'Home' ? 0 : k === 'End' ? items.length - 1 : k === 'ArrowDown' ? Math.min(items.length - 1, at + 1) : Math.max(0, at - 1);
+      if (items[n]) { items[n].focus({ preventScroll: true }); items[n].scrollIntoView({ block: 'nearest' }); }
+    }
+    else if (k === 'Enter' || k === ' ') { e.preventDefault(); e.stopPropagation(); if (at >= 0) pickChoose(Number(items[at].dataset.i)); }
+    else if (k.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey) {
+      e.stopPropagation();
+      var c = k.toLowerCase(), list = items.slice(at + 1).concat(items.slice(0, at + 1));
+      for (var i = 0; i < list.length; i++) if (list[i].textContent.trim().toLowerCase().charAt(0) === c) { list[i].focus({ preventScroll: true }); list[i].scrollIntoView({ block: 'nearest' }); break; }
+    }
+    else e.stopPropagation();
+  }, true);
+  document.addEventListener('scroll', function (e) { if (pick && !pick.el.contains(e.target)) pickClose(); }, true);
+  window.addEventListener('resize', function () { pickClose(); });
+  window.addEventListener('blur', function () { pickClose(); });
+
   boot();
 })();

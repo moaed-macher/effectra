@@ -52,6 +52,7 @@ function buildTray() {
     { label: "Neue Aufgabe", accelerator: "CommandOrControl+Space", click: quickAdd },
     { type: "separator" },
     { label: "Mit Windows starten", type: "checkbox", checked: autostart(), click: (m) => setAutostart(m.checked) },
+    ...(update.state === "ready" ? [{ type: "separator" }, { label: "Update " + (update.version || "") + " installieren", click: installNow }] : []),
     { type: "separator" },
     { label: "Beenden", click: () => { quitting = true; app.quit(); } }
   ]));
@@ -112,6 +113,13 @@ function createWindow(forceShow) {
   win.on("close", (e) => {
     saveState();
     if (quitting || !tray) return;
+    // Liegt ein fertiges Update bereit: beim Schließen still installieren, nächster Start hat die neue Version
+    if (autoUpdater && update.state === "ready") {
+      e.preventDefault();
+      quitting = true;
+      setImmediate(() => autoUpdater.quitAndInstall(true, false));
+      return;
+    }
     e.preventDefault();
     win.hide();
     if (!hintShown && !loadState().trayHint && Notification.isSupported()) {
@@ -145,8 +153,16 @@ function createWindow(forceShow) {
 }
 
 function send(state) {
+  const was = update.state;
   update = state;
   if (win && !win.isDestroyed()) win.webContents.send("desk:update", state);
+  if ((was === "ready") !== (state.state === "ready")) buildTray();
+}
+function installNow() {
+  if (!autoUpdater || update.state !== "ready") return;
+  saveState();
+  quitting = true;
+  setImmediate(() => autoUpdater.quitAndInstall(true, true));
 }
 
 // Updates des Fenster-Programms über GitHub Releases: lädt im Hintergrund,
@@ -189,10 +205,8 @@ ipcMain.handle("desk:check", (e) => {
   return autoUpdater.checkForUpdates().then(() => update, () => ({ state: "error" }));
 });
 ipcMain.on("desk:install", (e) => {
-  if (!trusted(e) || !autoUpdater || update.state !== "ready") return;
-  saveState();
-  quitting = true;
-  setImmediate(() => autoUpdater.quitAndInstall(true, true));
+  if (!trusted(e)) return;
+  installNow();
 });
 ipcMain.on("desk:theme", (e, dark) => {
   if (!trusted(e) || !win || win.isDestroyed()) return;
